@@ -1,4 +1,4 @@
-<img src="recipe/.png" height="100">
+<img src="recipe/uvaia-text.png" height="100" alt="Uvaia">
 
 __Leonardo de Oliveira Martins<sup>1</sup>__
 <br>
@@ -6,7 +6,12 @@ __Leonardo de Oliveira Martins<sup>1</sup>__
 
 ## Introduction
 
-mussum dorma
+Uvaia is a (experimental) program for pairwise alignment using the promising [WFA library](https://github.com/smarco/WFA), 
+implemented by Santiago Marco-Sola.
+
+#### Etymology
+[Uvaia Eugenia_pyriformis)](https://en.wikipedia.org/wiki/Eugenia_pyriformis) (also know as uvaieira, uaieira, ubaia e uvalha) is a fruit tree 
+typical of Brazil. Its name comes from the tupi *iwa'ya*, which means "sour fruit".
 
 ## Installation
 You should download this repository with `git clone --recursive` to ensure it also downloads its submodules.
