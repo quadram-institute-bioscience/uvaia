@@ -1,0 +1,22 @@
+language: c
+git:
+  submodules: true
+#install: make get-deps  # 
+compiler:
+  - gcc
+before_install:
+  - export OMP_NUM_THREADS=4 
+  - sudo apt-get update
+  - sudo apt-get install -y check 
+  - sudo apt-get install -y autotools-dev 
+install: 
+  - autoreconf
+script:
+  - "mkdir build; cd build; ../configure && make && make check"
+
+branches:
+  only:
+  - master
+
+# the Default script is "./configure && make && make test"
+
