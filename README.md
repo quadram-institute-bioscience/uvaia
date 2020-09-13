@@ -17,5 +17,7 @@ This is free software; you can redistribute it and/or modify it under the terms 
 License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later
 version (http://www.gnu.org/copyleft/gpl.html).
 
+Tauari uses the library [WFA](https://github.com/smarco/WFA) by Santiago Marco-Sola, distributed under the MIT license.
+
 ![Anurag's github stats](https://github-readme-stats.vercel.app/api?username=leomrtns&count_private=true&show_icons=true&theme=calm)
 

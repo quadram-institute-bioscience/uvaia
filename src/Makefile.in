@@ -111,7 +111,7 @@ PROGRAMS = $(bin_PROGRAMS)
 am_uvaia_OBJECTS = main.$(OBJEXT)
 uvaia_OBJECTS = $(am_uvaia_OBJECTS)
 am__DEPENDENCIES_1 =
-am__DEPENDENCIES_2 = ../WFA/libwfa.la \
+am__DEPENDENCIES_2 = ../submodules/WFA/libwfa.la \
 	../biomcmc-lib/lib/libbiomcmc_static.la $(am__DEPENDENCIES_1)
 uvaia_DEPENDENCIES = $(am__DEPENDENCIES_2)
 AM_V_lt = $(am__v_lt_@AM_V@)
@@ -319,8 +319,8 @@ top_srcdir = @top_srcdir@
 
 # "-I$(srcdir)/.." means that I must "include <WFA/gap_affine/etc.h>" (i.e. the WFA dir is needed)
 # "-I$(srcdir)/../WFA"  means that "include <gap_affine/etc.h>" works
-AM_CPPFLAGS = $(GTKDEPS_CFLAGS) -I$(srcdir)/../WFA -I$(srcdir)/../@BIOMCMCLIB@/lib @OPENMP_CPPFLAGS@  @ZLIB_LIBS@ 
-LDADD = $(GTKDEPS_LIBS) @CHECK_LIBS@  ../WFA/libwfa.la ../biomcmc-lib/lib/libbiomcmc_static.la @ZLIB_LIBS@  $(AM_LDFLAGS)
+AM_CPPFLAGS = $(GTKDEPS_CFLAGS) -I$(srcdir)/../submodules/WFA -I$(srcdir)/../@BIOMCMCLIB@/lib @OPENMP_CPPFLAGS@  @ZLIB_LIBS@ 
+LDADD = $(GTKDEPS_LIBS) @CHECK_LIBS@  ../submodules/WFA/libwfa.la ../biomcmc-lib/lib/libbiomcmc_static.la @ZLIB_LIBS@  $(AM_LDFLAGS)
 uvaia_SOURCES = main.c kseq.h
 uvaia_LDADD = $(LDADD)
 all: config.h

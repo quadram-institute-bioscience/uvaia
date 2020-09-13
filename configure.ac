@@ -74,7 +74,7 @@ dnl Call biomcmc-lib ./configure script recursively.
 AC_CONFIG_SUBDIRS([biomcmc-lib])
 AC_SUBST([BIOMCMCLIB], [biomcmc-lib])
 dnl generate makefiles (last recipes, after defining CFLAGS etc.)
-AC_CONFIG_FILES([Makefile src/Makefile WFA/Makefile])
+AC_CONFIG_FILES([Makefile src/Makefile submodules/WFA/Makefile])
 AC_OUTPUT
 
 echo \
