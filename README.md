@@ -15,7 +15,8 @@ is a fruit tree typical of Brazil. Its name comes from the tupi *iwa'ya*, which 
 imagination, its [pronunciation] resembles WFA.
 
 ## Installation
-You should download this repository with `git clone --recursive` to ensure it also downloads its submodules.
+You should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
+for a **tl;dr**).
 If you forgot to do so, you can update it with
 ```
 git submodule update --init --recursive
