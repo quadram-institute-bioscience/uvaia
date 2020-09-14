@@ -6,21 +6,28 @@ __Leonardo de Oliveira Martins<sup>1</sup>__
 
 ## Introduction
 
-Uvaia is a (experimental) program for pairwise alignment using the promising [WFA library](https://github.com/smarco/WFA), 
+Uvaia is an experimental program for pairwise alignment, using the promising [WFA library](https://github.com/smarco/WFA)
 implemented by Santiago Marco-Sola.
 
 #### Etymology
-[Uvaia Eugenia_pyriformis)](https://en.wikipedia.org/wiki/Eugenia_pyriformis) (also know as uvaieira, uaieira, ubaia e uvalha) is a fruit tree 
-typical of Brazil. Its name comes from the tupi *iwa'ya*, which means "sour fruit".
+[Uvaia (Eugenia_pyriformis)](https://en.wikipedia.org/wiki/Eugenia_pyriformis) (also know as uvaieira, uaieira, ubaia e uvalha) 
+is a fruit tree typical of Brazil. Its name comes from the tupi *iwa'ya*, which means "sour fruit", and if you have good 
+imagination, its [pronunciation] resembles WFA.
 
 ## Installation
 You should download this repository with `git clone --recursive` to ensure it also downloads its submodules.
-It will compile from the directories `biomcmc-lib` and `WFA` before finally compiling `uvaia`.
-Notice that executables for libraries above are **not** generated, only their libraries are used as dependencies.
+If you forgot to do so, you can update it with
+```
+git submodule update --init --recursive
+```
 
-This sofware uses `autotools`, so you can install it with `configure` + `make`.
+It will compile from the submodules `biomcmc-lib` and `WFA` before finally compiling `uvaia`.
+Notice that executables for other software it relies on are **not** generated, only their libraries are used as dependencies.
+
+This sofware uses `autotools`, which means you can install it with `configure` + `make`.
 You may need to define where you want it installed with `configure --prefix=DIR`, which is where are your unix-like
-`include/`, `lib/`, and `bin/` directories. My favourite is `~/local`.
+`include/`, `lib/`, and `bin/` directories. My favourite is `~/local`. Another popular option if you are on a conda
+environment is `--prefix=${CONDA_PREFIX}`
 
 Here is an example of its installation, please modify accordingly. 
 
@@ -47,3 +54,4 @@ under a GPL3.0 license.
 
 ![Anurag's github stats](https://github-readme-stats.vercel.app/api?username=leomrtns&count_private=true&show_icons=true&theme=calm)
 
+[pronunciation]: https://www.google.com/search?sxsrf=ALeKk02RdD-T7ABhToHthWhPVrVOjEjrGQ:1600068291002&q=uvaia+pronounce&sa=X&ved=2ahUKEwi9u-fwjujrAhUqURUIHbzbAY0Q7xYoAHoECFoQKA&biw=1920&bih=1008
