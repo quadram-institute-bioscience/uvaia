@@ -595,7 +595,7 @@ PACKAGE_STRING='uvaia 1.0.0'
 PACKAGE_BUGREPORT='leomrtns@gmail.com'
 PACKAGE_URL='https://github.com/quadram-institute-bioscience/uvaia'
 
-ac_unique_file="src/main.c"
+ac_unique_file="src/align.c"
 ac_default_prefix=${HOME}
 # Factoring default headers for most tests.
 ac_includes_default="\

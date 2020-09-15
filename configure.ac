@@ -1,7 +1,7 @@
 AC_INIT([uvaia], [1.0.0], [leomrtns@gmail.com],[], [https://github.com/quadram-institute-bioscience/uvaia])
 AC_CONFIG_AUX_DIR([.])
 
-AC_CONFIG_SRCDIR([src/main.c])
+AC_CONFIG_SRCDIR([src/align.c])
 AC_CONFIG_HEADER([src/config.h])
 AC_PREFIX_DEFAULT(${HOME})
 dnl libtoolize recomendation

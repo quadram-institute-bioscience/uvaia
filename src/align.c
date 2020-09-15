@@ -81,7 +81,7 @@ main (int argc, char **argv)
   char *aln_sequence = NULL;
 
   mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_8M);
-  affine_penalties_t affine_penalties = {.match = 0, .mismatch = 3, .gap_opening = 6, .gap_extension = 2, };
+  affine_penalties_t affine_penalties = {.match = 0, .mismatch = 4, .gap_opening = 6, .gap_extension = 2}; // bwa-mem values
   affine_wavefronts_t *affine_wavefronts;
 
   time0 = clock ();
@@ -93,7 +93,8 @@ main (int argc, char **argv)
   i = kseq_read(ref);
   gzclose(fp);
 
-  affine_wavefronts = affine_wavefronts_new_complete(ref->seq.l, 2*ref->seq.l, &affine_penalties, NULL, mm_allocator);
+  //affine_wavefronts = affine_wavefronts_new_complete(ref->seq.l, 2*ref->seq.l, &affine_penalties, NULL, mm_allocator);
+  affine_wavefronts = affine_wavefronts_new_reduced (ref->seq.l, 2*ref->seq.l, &affine_penalties, 128, 512, NULL, mm_allocator);
 
   /* 2. read each query sequence and align against reference */
   fp = gzopen((char*) params.fasta->filename[0], "r");

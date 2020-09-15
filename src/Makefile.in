@@ -88,7 +88,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = uvaia$(EXEEXT)
+bin_PROGRAMS = uvaia_align$(EXEEXT) uvaia_search_u$(EXEEXT) \
+	uvaia_search_a$(EXEEXT)
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
@@ -108,17 +109,23 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_uvaia_OBJECTS = main.$(OBJEXT)
-uvaia_OBJECTS = $(am_uvaia_OBJECTS)
+am_uvaia_align_OBJECTS = align.$(OBJEXT)
+uvaia_align_OBJECTS = $(am_uvaia_align_OBJECTS)
 am__DEPENDENCIES_1 =
 am__DEPENDENCIES_2 = $(top_builddir)/submodules/WFA/libwfa.la \
 	$(top_builddir)/@BIOMCMCLIB@/lib/libbiomcmc_static.la \
 	$(am__DEPENDENCIES_1)
-uvaia_DEPENDENCIES = $(am__DEPENDENCIES_2)
+uvaia_align_DEPENDENCIES = $(am__DEPENDENCIES_2)
 AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
+am_uvaia_search_a_OBJECTS = search_a.$(OBJEXT)
+uvaia_search_a_OBJECTS = $(am_uvaia_search_a_OBJECTS)
+uvaia_search_a_DEPENDENCIES = $(am__DEPENDENCIES_2)
+am_uvaia_search_u_OBJECTS = search_u.$(OBJEXT)
+uvaia_search_u_OBJECTS = $(am_uvaia_search_u_OBJECTS)
+uvaia_search_u_DEPENDENCIES = $(am__DEPENDENCIES_2)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -153,8 +160,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(uvaia_SOURCES)
-DIST_SOURCES = $(uvaia_SOURCES)
+SOURCES = $(uvaia_align_SOURCES) $(uvaia_search_a_SOURCES) \
+	$(uvaia_search_u_SOURCES)
+DIST_SOURCES = $(uvaia_align_SOURCES) $(uvaia_search_a_SOURCES) \
+	$(uvaia_search_u_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -322,8 +331,12 @@ top_srcdir = @top_srcdir@
 # "-I$(srcdir)/../WFA"  means that "include <gap_affine/etc.h>" works (obs: top_srcdir is relative to root so dont need the ".."
 AM_CPPFLAGS = $(GTKDEPS_CFLAGS) -I$(top_srcdir)/submodules/WFA -I$(top_srcdir)/@BIOMCMCLIB@/lib @OPENMP_CPPFLAGS@  @ZLIB_LIBS@ 
 LDADD = $(GTKDEPS_LIBS) @CHECK_LIBS@  $(top_builddir)/submodules/WFA/libwfa.la $(top_builddir)/@BIOMCMCLIB@/lib/libbiomcmc_static.la @ZLIB_LIBS@  $(AM_LDFLAGS)
-uvaia_SOURCES = main.c kseq.h
-uvaia_LDADD = $(LDADD)
+uvaia_align_SOURCES = align.c kseq.h
+uvaia_align_LDADD = $(LDADD)
+uvaia_search_u_SOURCES = search_u.c kseq.h
+uvaia_search_u_LDADD = $(LDADD)
+uvaia_search_a_SOURCES = search_a.c kseq.h
+uvaia_search_a_LDADD = $(LDADD)
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -423,9 +436,17 @@ clean-binPROGRAMS:
 	echo " rm -f" $$list; \
 	rm -f $$list
 
-uvaia$(EXEEXT): $(uvaia_OBJECTS) $(uvaia_DEPENDENCIES) $(EXTRA_uvaia_DEPENDENCIES) 
-	@rm -f uvaia$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(uvaia_OBJECTS) $(uvaia_LDADD) $(LIBS)
+uvaia_align$(EXEEXT): $(uvaia_align_OBJECTS) $(uvaia_align_DEPENDENCIES) $(EXTRA_uvaia_align_DEPENDENCIES) 
+	@rm -f uvaia_align$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(uvaia_align_OBJECTS) $(uvaia_align_LDADD) $(LIBS)
+
+uvaia_search_a$(EXEEXT): $(uvaia_search_a_OBJECTS) $(uvaia_search_a_DEPENDENCIES) $(EXTRA_uvaia_search_a_DEPENDENCIES) 
+	@rm -f uvaia_search_a$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(uvaia_search_a_OBJECTS) $(uvaia_search_a_LDADD) $(LIBS)
+
+uvaia_search_u$(EXEEXT): $(uvaia_search_u_OBJECTS) $(uvaia_search_u_DEPENDENCIES) $(EXTRA_uvaia_search_u_DEPENDENCIES) 
+	@rm -f uvaia_search_u$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(uvaia_search_u_OBJECTS) $(uvaia_search_u_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -433,7 +454,9 @@ mostlyclean-compile:
 distclean-compile:
 	-rm -f *.tab.c
 
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/main.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/align.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search_a.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search_u.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
