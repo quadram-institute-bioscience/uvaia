@@ -8,9 +8,10 @@ typedef struct
 {
   struct arg_lit  *help;
   struct arg_lit  *version;
+  struct arg_int  *nbest;
   struct arg_file *ref;
   struct arg_file *fasta;
-  struct arg_int  *nbest;
+  struct arg_file *out;
   struct arg_end  *end;
   void **argtable;
 } arg_parameters;
@@ -20,7 +21,8 @@ void del_arg_parameters (arg_parameters params);
 void print_usage (arg_parameters params, char *progname);
 void upper_kseq (kseq_t *seq);
 
-void describe_scores (char *query_name, double *score, char_vector refnames, int nbest);
+void describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int **idx, int *n_idx);
+void save_sequences (const char *filename, int *idx, int n_idx, char_vector seq, char_vector name);
 bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
 
 arg_parameters
@@ -32,9 +34,10 @@ get_parameters_from_argv (int argc, char **argv)
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
     .ref     = arg_file1("r","reference", "<ref.fa|ref.fa.gz>", "_aligned_ reference sequences"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa|seqs.fa.gz>", 1, 1, "_aligned_ sequences to search on references"),
+    .out     = arg_file0("o","output", "<gzipped fasta>", "output reference sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.nbest, params.ref, params.fasta, params.end};
+  void* argtable[] = {params.help, params.version, params.nbest, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 8; // default values before parsing
   /* actual parsing: */
@@ -52,6 +55,7 @@ del_arg_parameters (arg_parameters params)
   if (params.nbest) free (params.nbest);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
+  if (params.out)   free (params.out);
   if (params.end)   free (params.end);
 }
 
@@ -81,7 +85,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int i, j;
+  int i, j, *idx = NULL, n_idx = 0;
   double *score = NULL, k2p[2];
   clock_t time0, time1;
   kseq_t *seq;
@@ -91,7 +95,7 @@ main (int argc, char **argv)
 
   time0 = clock ();
   arg_parameters params = get_parameters_from_argv (argc, argv);
-  
+
   /* 1. read reference sequences into char_vectors (ref genome wll be on seq->seq.s and name on seq->name.s) */
   cv_seq  = new_char_vector (1);
   cv_name = new_char_vector (1);
@@ -110,7 +114,7 @@ main (int argc, char **argv)
   }
   gzclose(fp);
   kseq_destroy(seq);
-  time1 = clock (); fprintf (stderr, "finished reading references in %lf secs\n",  (double)(time1-time0)/(double)(CLOCKS_PER_SEC)); fflush(stderr); 
+  time1 = clock (); fprintf (stderr, "finished reading references in %lf secs\n",  (double)(time1-time0)/(double)(CLOCKS_PER_SEC)); fflush(stderr); time0 = time1; 
 
   score = (double*) biomcmc_malloc (cv_seq->nstrings * sizeof (double));
   for (j = 0; j < cv_seq->nstrings; j++) score[j] = 0.;
@@ -122,24 +126,28 @@ main (int argc, char **argv)
   while ((i = kseq_read(seq)) >= 0) { // one query per iteration
     if (sequence_n_below_threshold (seq->seq.s, seq->seq.l, 0.5)) { 
       upper_kseq (seq);
+#ifdef _OPENMP
+#pragma omp parallel for shared(cv_seq,cv_name,seq) schedule(dynamic)
+#endif
       for (j = 0; j < cv_seq->nstrings; j++) {
         if (cv_seq->nchars[j] != seq->seq.l)
           biomcmc_error ("This program assumes aligned sequences, and query sequence %s has length %u while reference sequence %s has length %u\n",
                          seq->name.s, seq->seq.l, cv_name->string[j], cv_seq->nchars[j]);
         score[j] = biomcmc_pairwise_score_k2p (cv_seq->string[j], seq->seq.s, seq->seq.l);
-        //biomcmc_calc_pairwise_distance_K2P (cv_seq->string[j], seq->seq.s, NULL, seq->seq.l, k2p);
-        //score[j] = 1.1 * k2p[1] + k2p[0]; // k2p[0] is fraction of transitions and k2p[1] of transversions
       }
-      describe_scores (seq->name.s, score, cv_name, params.nbest->ival[0]);
+      describe_scores (seq->name.s, score, cv_name, params.nbest->ival[0], &idx, &n_idx);
     }
     else fprintf (stderr, "Query sequence %s is too ambiguous\n", seq->name.s);
   }
+  time1 = clock (); fprintf (stderr, "finished search in %lf secs\n",  (double)(time1-time0)/(double)(CLOCKS_PER_SEC)); fflush(stderr); time0 = time1;  
 
-  time1 = clock (); fprintf (stderr, "finished in  %lf secs\n",  (double)(time1-time0)/(double)(CLOCKS_PER_SEC)); fflush(stderr); 
+  if (params.out->count) save_sequences (params.out->filename[0], idx, n_idx, cv_seq, cv_name);
+  time1 = clock (); fprintf (stderr, "finished saving in %lf secs\n",  (double)(time1-time0)/(double)(CLOCKS_PER_SEC)); fflush(stderr); time0 = time1;  
 
   /* everybody is free to feel good */
   kseq_destroy(seq);
   if (score) free (score);
+  if (idx)   free (idx);
   del_char_vector (cv_seq);
   del_char_vector (cv_name);
   del_arg_parameters (params);
@@ -153,13 +161,32 @@ upper_kseq (kseq_t *seq)
 }
 
 void 
-describe_scores (char *query_name, double *score, char_vector refnames, int nbest)
+describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int **idx, int *n_idx)
 {
   int i; 
   empfreq_double srt = new_empfreq_double_sort_decreasing (score, refnames->nstrings);
   if (nbest > refnames->nstrings) nbest = refnames->nstrings;
   for (i = 0; i < nbest; i++) printf ("%s, %s, %lf\n", query_name, refnames->string[srt->d[i].idx], srt->d[i].freq);
+
+  (*idx) = (int*) biomcmc_realloc ((int*) (*idx), ((*n_idx) + nbest) * sizeof (int));
+  for (i = 0; i < nbest; i++) (*idx)[(*n_idx)++] = srt->d[i].idx;
+  del_empfreq_double (srt);
   return;
+}
+
+void
+save_sequences (const char *filename, int *idx, int n_idx, char_vector seq, char_vector name)
+{
+  int i;
+  empfreq best_ids = new_empfreq_from_int (idx, n_idx); // remove duplicates (ref sequences chosen by several queries)
+  n_idx = best_ids->n;
+  for (i = 0; i < n_idx; i ++) idx[i] = best_ids->i[i].idx; // most frequent first
+  qsort (idx, n_idx, sizeof (int), compare_int_increasing); // char_vector_reduce() assumes ordered idx of valid
+  char_vector_reduce_to_valid_strings (seq, idx, n_idx);
+  char_vector_reduce_to_valid_strings (name, idx, n_idx);
+  save_gzfasta_from_char_vector (filename, name, seq);
+
+  del_empfreq (best_ids);
 }
 
 bool
