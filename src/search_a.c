@@ -9,6 +9,7 @@ typedef struct
   struct arg_lit  *help;
   struct arg_lit  *version;
   struct arg_int  *nbest;
+  struct arg_int  *nmax;
   struct arg_file *ref;
   struct arg_file *fasta;
   struct arg_file *out;
@@ -21,7 +22,7 @@ void del_arg_parameters (arg_parameters params);
 void print_usage (arg_parameters params, char *progname);
 void upper_kseq (kseq_t *seq);
 
-void describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int **idx, int *n_idx);
+void describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int nmax, int **idx, int *n_idx);
 void save_sequences (const char *filename, int *idx, int n_idx, char_vector seq, char_vector name);
 bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
 
@@ -32,14 +33,16 @@ get_parameters_from_argv (int argc, char **argv)
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
+    .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences when several optimal (default=2 x nbest)"),
     .ref     = arg_file1("r","reference", "<ref.fa|ref.fa.gz>", "_aligned_ reference sequences"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa|seqs.fa.gz>", 1, 1, "_aligned_ sequences to search on references"),
     .out     = arg_file0("o","output", "<gzipped fasta>", "output reference sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.nbest, params.ref, params.fasta, params.out, params.end};
+  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 8; // default values before parsing
+  params.nmax->ival[0] = 0;  // default values before parsing
   /* actual parsing: */
   if (arg_nullcheck(params.argtable)) biomcmc_error ("Problem allocating memory for the argtable (command line arguments) structure");
   arg_parse (argc, argv, params.argtable); // returns >0 if errors were found, but this info also on params.end->count
@@ -53,6 +56,7 @@ del_arg_parameters (arg_parameters params)
   if (params.help)  free (params.help);
   if (params.version) free (params.version);
   if (params.nbest) free (params.nbest);
+  if (params.nmax) free (params.nmax);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.out)   free (params.out);
@@ -86,7 +90,7 @@ int
 main (int argc, char **argv)
 {
   int i, j, *idx = NULL, n_idx = 0;
-  double *score = NULL, k2p[2];
+  double *score = NULL, k2p[3];
   clock_t time0, time1;
   kseq_t *seq;
   gzFile fp;
@@ -95,6 +99,9 @@ main (int argc, char **argv)
 
   time0 = clock ();
   arg_parameters params = get_parameters_from_argv (argc, argv);
+
+  if (params.nbest->ival[0] < 1) params.nbest->ival[0] = 1;
+  if (params.nmax->ival[0] < params.nbest->ival[0]) params.nmax->ival[0] = 2 * params.nbest->ival[0];
 
   /* 1. read reference sequences into char_vectors (ref genome wll be on seq->seq.s and name on seq->name.s) */
   cv_seq  = new_char_vector (1);
@@ -133,9 +140,9 @@ main (int argc, char **argv)
         if (cv_seq->nchars[j] != seq->seq.l)
           biomcmc_error ("This program assumes aligned sequences, and query sequence %s has length %u while reference sequence %s has length %u\n",
                          seq->name.s, seq->seq.l, cv_name->string[j], cv_seq->nchars[j]);
-        score[j] = biomcmc_pairwise_score_k2p (cv_seq->string[j], seq->seq.s, seq->seq.l);
+        score[j] = biomcmc_pairwise_score_matches (cv_seq->string[j], seq->seq.s, seq->seq.l, k2p);
       }
-      describe_scores (seq->name.s, score, cv_name, params.nbest->ival[0], &idx, &n_idx);
+      describe_scores (seq->name.s, score, cv_name, params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx);
     }
     else fprintf (stderr, "Query sequence %s is too ambiguous\n", seq->name.s);
   }
@@ -161,12 +168,20 @@ upper_kseq (kseq_t *seq)
 }
 
 void 
-describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int **idx, int *n_idx)
+describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int nmax, int **idx, int *n_idx)
 {
   int i; 
   empfreq_double srt = new_empfreq_double_sort_decreasing (score, refnames->nstrings);
+  double best_score = srt->d[0].freq;
   if (nbest > refnames->nstrings) nbest = refnames->nstrings;
-  for (i = 0; i < nbest; i++) printf ("%s, %s, %lf\n", query_name, refnames->string[srt->d[i].idx], srt->d[i].freq);
+  if (nmax > refnames->nstrings)  nmax = refnames->nstrings;
+
+  for (i = 0; i < nbest; i++) 
+    printf ("%s, %s, %lf\n", query_name, refnames->string[srt->d[i].idx], srt->d[i].freq);
+  for (; (i < nmax) && ((best_score  - srt->d[i].freq) < 1.e-15); i++) 
+    printf ("%s, %s, %lf\n", query_name, refnames->string[srt->d[i].idx], srt->d[i].freq);
+  fflush(stdout);
+  nbest = i; // in case we had more than nbest with optimal score 
 
   (*idx) = (int*) biomcmc_realloc ((int*) (*idx), ((*n_idx) + nbest) * sizeof (int));
   for (i = 0; i < nbest; i++) (*idx)[(*n_idx)++] = srt->d[i].idx;
