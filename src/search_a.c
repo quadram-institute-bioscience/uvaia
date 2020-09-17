@@ -4,6 +4,8 @@
 
 #include "utils.h" 
 
+KSEQ_INIT(gzFile, gzread)
+
 typedef struct
 {
   struct arg_lit  *help;
@@ -84,12 +86,11 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int i, j, *idx = NULL, n_idx = 0;
+  int i, *idx = NULL, n_idx = 0;
   int64_t time0[2]; 
   double t_secs = 0.;
   kseq_t *seq;
   gzFile fp;
-  char *aln_sequence = NULL;
   char_vector cv_seq, cv_name;
 
   biomcmc_get_time (time0); 
@@ -103,17 +104,19 @@ main (int argc, char **argv)
   cv_name = new_char_vector (1);
   fp = gzopen((char*) params.ref->filename[0], "r");
   seq = kseq_init(fp);
-  while ((i = kseq_read(seq)) >= 0) add_reference_genome_to_char_vectors (seq, cv_seq, cv_name);
+  while ((i = kseq_read(seq)) >= 0) add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name);
   gzclose(fp);
   kseq_destroy(seq);
   fprintf (stderr, "finished reading references in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
+
+  if (cv_seq->nstrings < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.ref->filename[0]);
 
   /* 2. read each query sequence and align against reference */
   fp = gzopen((char*) params.fasta->filename[0], "r");
   seq = kseq_init(fp); 
 
   while ((i = kseq_read(seq)) >= 0) 
-    t_secs += query_genome_against_char_vectors (seq, cv_seq, cv_name, params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx);
+    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx);
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 

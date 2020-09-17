@@ -17,7 +17,7 @@ typedef struct
 arg_parameters get_parameters_from_argv (int argc, char **argv);
 void del_arg_parameters (arg_parameters params);
 void print_usage (arg_parameters params, char *progname);
-char * return_query_aligned (char* pattern, int pattern_length, char* text, int text_length, edit_cigar_t* edit_cigar, mm_allocator_t* mm_allocator);
+char * return_query_aligned (int pattern_length, char* text, int text_length, edit_cigar_t* edit_cigar, mm_allocator_t* mm_allocator);
 bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
 
 arg_parameters
@@ -106,7 +106,7 @@ main (int argc, char **argv)
       affine_wavefronts_clear (affine_wavefronts);
       affine_wavefronts_align (affine_wavefronts, ref->seq.s, ref->seq.l, seq->seq.s, seq->seq.l);
       /* 2.2 get alignment itself (wfa gives only cigar) , excluding insertions relative to reference */
-      aln_sequence = return_query_aligned (ref->seq.s, ref->seq.l, seq->seq.s, seq->seq.l, &affine_wavefronts->edit_cigar, mm_allocator);
+      aln_sequence = return_query_aligned (ref->seq.l, seq->seq.s, seq->seq.l, &affine_wavefronts->edit_cigar, mm_allocator);
       printf (">%s\n%s\n", seq->name.s, aln_sequence);
       mm_allocator_free (mm_allocator, aln_sequence); // delete aln_sequence memory, that was allocated within allocator
     }
@@ -125,7 +125,7 @@ main (int argc, char **argv)
 }
 
 char *
-return_query_aligned (char* pattern, int pattern_length, char* text, int text_length, edit_cigar_t* edit_cigar, mm_allocator_t* mm_allocator) 
+return_query_aligned (int pattern_length, char* text, int text_length, edit_cigar_t* edit_cigar, mm_allocator_t* mm_allocator) 
 {
   // Parameters
   char* const operations = edit_cigar->operations;

@@ -82,12 +82,12 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int i, j, max_reflen = 0;
+  int i, j;
+  unsigned max_reflen = 0;
   double *score = NULL;
   clock_t time0, time1;
   kseq_t *seq;
   gzFile fp;
-  char *aln_sequence = NULL;
   char_vector cv_seq, cv_name;
 
   mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_8M);

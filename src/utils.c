@@ -4,75 +4,64 @@
 
 #include "utils.h"
 
-void upper_kseq (kseq_t *seq);
+void upper_kseq (char *s, unsigned l);
 void describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int nmax, int **idx, int *n_idx);
 bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
 
-int
-compare_double_triplet_decreasing (const void *a, const void *b)
-{ // like a regular qsort, but move 3 consecutive doubles
-  if (*(double*) b > *(double*) a) return  1;
-  if (*(double*) b < *(double*) a) return -1;
-  if (*((double*) b+1) > *((double*) a+1)) return  1;
-  if (*((double*) b+1) < *((double*) a+1)) return -1;
-  if (*((double*) b+2) > *((double*) a+2)) return  1;
-  if (*((double*) b+2) < *((double*) a+2)) return -1;
-  return 0;
-}
 
 void
-add_reference_genome_to_char_vectors (kseq_t *seq, char_vector cv_seq, char_vector cv_name)
+add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name)
 {
   double result[3];
-  if (cv_seq->next_avail && (cv_seq->nchars[cv_seq->next_avail-1] != seq->seq.l)) {
-    biomcmc_warning ("This program assumes aligned reference sequences, and sequence %s has length %u while sequence %s has length %u\n",
-                     seq->name.s, seq->seq.l, cv_name->string[cv_seq->next_avail-1], cv_seq->nchars[cv_seq->next_avail-1]);
+  if (cv_seq->next_avail && (cv_seq->nchars[cv_seq->next_avail-1] != (size_t) l)) {
+    biomcmc_warning ("This program assumes aligned reference sequences, and sequence %s has length %u while sequence %s has length %lu\n",
+                     name, l, cv_name->string[cv_seq->next_avail-1], cv_seq->nchars[cv_seq->next_avail-1]);
     biomcmc_error ("You can use uvaia_align (or mafft, or minimap2) to align them against the same reference");
   }
-  upper_kseq (seq); // must be _before_ count_sequence
-  biomcmc_count_sequence_acgt (seq->seq.s, seq->seq.l, result); 
-  if (result[0] < 0.5) { fprintf (stderr, "Reference %s has proportion of ACGT (=%lf) below 50%% threshold\n", seq->name.s, result[0]); return; }
-  if (result[2] > 0.5) { fprintf (stderr, "Reference %s has proportion of N etc. (=%lf) above 50%% threshold\n", seq->name.s, result[2]); return; }
-  char_vector_add_string (cv_seq,  seq->seq.s);
-  char_vector_add_string (cv_name, seq->name.s);
+  upper_kseq (s, l); // must be _before_ count_sequence
+  biomcmc_count_sequence_acgt (s, l, result); 
+  if (result[0] < 0.5) { fprintf (stderr, "Reference %s has proportion of ACGT (=%lf) below 50%% threshold\n", name, result[0]); return; }
+  if (result[2] > 0.5) { fprintf (stderr, "Reference %s has proportion of N etc. (=%lf) above 50%% threshold\n", name, result[2]); return; }
+  char_vector_add_string (cv_seq,  s);
+  char_vector_add_string (cv_name, name);
 }
 
 double
-query_genome_against_char_vectors (kseq_t *seq, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx)
+query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx)
 {
   int i;
   int64_t time0[2];
   double *score, result[3];
 
   biomcmc_get_time (time0);
-  upper_kseq (seq); // must be _before_ count_sequence
-  biomcmc_count_sequence_acgt (seq->seq.s, seq->seq.l, result); 
-  if (result[0] < 0.5) { fprintf (stderr, "Query %s has proportion of ACGT (=%lf) below 50%% threshold\n", seq->name.s, result[0]); return 0.; }
-  if (result[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%lf) above 50%% threshold\n", seq->name.s, result[2]); return 0.; }
+  upper_kseq (s, l); // must be _before_ count_sequence
+  biomcmc_count_sequence_acgt (s, l, result); 
+  if (result[0] < 0.5) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below 50%% threshold\n", name, result[0]); return 0.; }
+  if (result[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above 50%% threshold\n", name, result[2]); return 0.; }
   score = (double*) biomcmc_malloc (3 * cv_seq->nstrings * sizeof (double)); // 3 scores
 
 #ifdef _OPENMP
-#pragma omp parallel for shared(score, time0, cv_seq,cv_name,seq) schedule(dynamic)
+#pragma omp parallel for shared(score, time0, cv_seq,cv_name) schedule(dynamic)
 #endif
   for (i = 0; i < cv_seq->nstrings; i++) {
-    if (cv_seq->nchars[i] != seq->seq.l) {
-      biomcmc_warning ("This program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %u\n",
-                       seq->name.s, seq->seq.l, cv_name->string[i], cv_seq->nchars[i]);
+    if (cv_seq->nchars[i] != (size_t) l) {
+      biomcmc_warning ("This program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %lu\n",
+                       name, l, cv_name->string[i], cv_seq->nchars[i]);
       biomcmc_error ("Soon we'll be able to align ourselves ;)");
     }
-    score[3 * i] = biomcmc_pairwise_score_matches (cv_seq->string[i], seq->seq.s, seq->seq.l, result); // ACGT match
+    score[3 * i] = biomcmc_pairwise_score_matches (cv_seq->string[i], s, l, result); // ACGT match
     score[3 * i + 1] = result[0]; // match between non-N (i.e. include R W etc.)
     score[3 * i + 2] = result[1]; // unweighted partial matches (e.g. T matches partially with W (T+A) ) 
   }
-  describe_scores (seq->name.s, score, cv_name, nbest, nmax, idx, n_idx); // updates list idx[] of references to save
+  describe_scores (name, score, cv_name, nbest, nmax, idx, n_idx); // updates list idx[] of references to save
   if (score) free (score);
   return biomcmc_update_elapsed_time (time0); // returns time in seconds
 }
 
 void
-upper_kseq (kseq_t *seq)
+upper_kseq (char *s, unsigned l)
 {
-  for (int i = 0; i < seq->seq.l; i++) seq->seq.s[i] = toupper(seq->seq.s[i]);
+  for (unsigned i = 0; i < l; i++) s[i] = toupper(s[i]);
 }
 
 void 
