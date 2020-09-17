@@ -11,5 +11,5 @@ uvaia_align_LDADD = $(LDADD)
 uvaia_search_u_SOURCES = search_u.c kseq.h
 uvaia_search_u_LDADD = $(LDADD)
 
-uvaia_search_a_SOURCES = search_a.c kseq.h
+uvaia_search_a_SOURCES = search_a.c utils.c utils.h kseq.h
 uvaia_search_a_LDADD = $(LDADD)

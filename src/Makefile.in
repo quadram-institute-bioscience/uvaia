@@ -120,7 +120,7 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am_uvaia_search_a_OBJECTS = search_a.$(OBJEXT)
+am_uvaia_search_a_OBJECTS = search_a.$(OBJEXT) utils.$(OBJEXT)
 uvaia_search_a_OBJECTS = $(am_uvaia_search_a_OBJECTS)
 uvaia_search_a_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_uvaia_search_u_OBJECTS = search_u.$(OBJEXT)
@@ -335,7 +335,7 @@ uvaia_align_SOURCES = align.c kseq.h
 uvaia_align_LDADD = $(LDADD)
 uvaia_search_u_SOURCES = search_u.c kseq.h
 uvaia_search_u_LDADD = $(LDADD)
-uvaia_search_a_SOURCES = search_a.c kseq.h
+uvaia_search_a_SOURCES = search_a.c utils.c utils.h kseq.h
 uvaia_search_a_LDADD = $(LDADD)
 all: config.h
 	$(MAKE) $(AM_MAKEFLAGS) all-am
@@ -457,6 +457,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/align.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search_a.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search_u.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utils.Po@am__quote@
 
 .c.o:
 @am__fastdepCC_TRUE@	$(AM_V_CC)depbase=`echo $@ | sed 's|[^/]*$$|$(DEPDIR)/&|;s|\.o$$||'`;\
