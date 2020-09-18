@@ -40,15 +40,16 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
   if (result[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above 50%% threshold\n", name, result[2]); return 0.; }
   score = (double*) biomcmc_malloc (3 * cv_seq->nstrings * sizeof (double)); // 3 scores
 
+  if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size
+    biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %lu",
+                     name, l, cv_name->string[0], cv_seq->nchars[0]);
+    biomcmc_error ("Soon we'll be able to align ourselves ;)");
+  }
+
 #ifdef _OPENMP
-#pragma omp parallel for shared(score, time0, cv_seq,cv_name) schedule(dynamic)
+#pragma omp parallel for shared(score, time0, cv_seq, cv_name) schedule(dynamic)
 #endif
-  for (i = 0; i < cv_seq->nstrings; i++) {
-    if (cv_seq->nchars[i] != (size_t) l) {
-      biomcmc_warning ("This program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %lu\n",
-                       name, l, cv_name->string[i], cv_seq->nchars[i]);
-      biomcmc_error ("Soon we'll be able to align ourselves ;)");
-    }
+  for (i = 0; i < cv_seq->nstrings; i++) { // openmp doesnt like complex for() loops
     score[3 * i] = biomcmc_pairwise_score_matches (cv_seq->string[i], s, l, result); // ACGT match
     score[3 * i + 1] = result[0]; // match between non-N (i.e. include R W etc.)
     score[3 * i + 2] = result[1]; // unweighted partial matches (e.g. T matches partially with W (T+A) ) 
