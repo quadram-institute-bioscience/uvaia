@@ -14,5 +14,6 @@ void add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char
 double query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx);
 void print_score_header (void);
 void save_sequences (const char *filename, int *idx, int n_idx, char_vector seq, char_vector name);
+char *return_query_aligned (int pattern_length, char* text, int text_length, edit_cigar_t* edit_cigar, mm_allocator_t* mm_allocator);
 
 #endif

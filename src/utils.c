@@ -192,3 +192,32 @@ sequence_n_below_threshold (char *seq, int seq_length, double threshold)
   return false;
 }
 
+char *
+return_query_aligned (int pattern_length, char* text, int text_length, edit_cigar_t* edit_cigar, mm_allocator_t* mm_allocator) 
+{
+  // Parameters
+  char* const operations = edit_cigar->operations;
+  // Allocate alignment buffers
+  const int max_buffer_length = text_length + pattern_length + 1;
+  char* text_alg = mm_allocator_calloc (mm_allocator, max_buffer_length, char, true);
+  // Compute alignment buffers
+  int i, alg_pos = 0, pattern_pos = 0, text_pos = 0;
+  for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) switch (operations[i]) {
+    case 'M':
+    case 'X':
+      text_alg[alg_pos++] = text[text_pos++];
+      pattern_pos++;
+      break;
+    case 'I':
+      text_pos++;
+      break;
+    case 'D':
+      text_alg[alg_pos++] = '-';
+      pattern_pos++;
+      break;
+    default:
+      break;
+  }
+  text_alg[alg_pos] = '\0';
+  return text_alg;
+}
