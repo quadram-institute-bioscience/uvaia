@@ -6,8 +6,10 @@ __Leonardo de Oliveira Martins<sup>1</sup>__
 
 ## Introduction
 
-Uvaia is an experimental program for pairwise alignment, using the promising [WFA library](https://github.com/smarco/WFA)
-implemented by Santiago Marco-Sola.
+Uvaia is an experimental program for pairwise reference-based alignment, and subsequent search against an aligned database. 
+The alignment uses the promising [WFA library](https://github.com/smarco/WFA) implemented by Santiago Marco-Sola, and
+the database search is based on score distances from the 
+[biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib) library.
 
 #### Etymology
 [Uvaia (Eugenia_pyriformis)](https://en.wikipedia.org/wiki/Eugenia_pyriformis) (also know as uvaieira, uaieira, ubaia e uvalha) 
