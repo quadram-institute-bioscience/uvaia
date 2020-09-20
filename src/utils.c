@@ -31,15 +31,15 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
 {
   int i;
   int64_t time0[2];
-  double *score, *result;
+  double *score;
 
   biomcmc_get_time (time0);
   upper_kseq (s, l); // must be _before_ count_sequence
-  result = (double*) biomcmc_malloc (5 * sizeof (double));
-  biomcmc_count_sequence_acgt (s, l, result); 
-  if (result[0] < 0.5) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below 50%% threshold\n", name, result[0]); free (result); return 0.; }
-  if (result[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above 50%% threshold\n", name, result[2]); free (result); return 0.; }
-  score = (double*) biomcmc_malloc ((3 * cv_seq->nstrings) * sizeof (double)); // 3 scores 
+  score = (double*) biomcmc_malloc ((5 * cv_seq->nstrings) * sizeof (double)); // 3 scores but we need 5 for openMP
+
+  biomcmc_count_sequence_acgt (s, l, score); // score[] used temporarily here
+  if (score[0] < 0.5) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below 50%% threshold\n", name, score[0]); free (score); return 0.; }
+  if (score[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above 50%% threshold\n", name, score[2]); free (score); return 0.; }
 
   if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size
     biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %lu",
@@ -51,13 +51,16 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
 #pragma omp parallel for shared(score, time0, cv_seq, cv_name) schedule(dynamic)
 #endif
   for (i = 0; i < cv_seq->nstrings; i++) { // openmp doesnt like complex for() loops
-    biomcmc_pairwise_score_matches (cv_seq->string[i], s, l, result);
-    score[3 * i] = result[0]; // ACGT match
-    score[3 * i + 1] = result[1]/result[4]; // match between non-N (i.e. include R W etc.) divided by compared sites
-    score[3 * i + 2] = result[2]; // weighted partial matches (e.g. T has 50% match  with W (T+A)) 
+    biomcmc_pairwise_score_matches (cv_seq->string[i], s, l, score + (5 * i));
+//    score[5 * i] = result[0]; // ACGT match
+    score[5 * i + 1] /= score[5 * i + 4]; // match between non-N (i.e. include R W etc.) divided by compared sites
+//    score[5 * i + 2] = result[2]; // weighted partial matches (e.g. T has 50% match  with W (T+A)) 
+    if (score[5*i+2] < 1.) {
+      for (int j=0; j < 5; j++) printf ("%lf ", score[5*i + j]);
+      printf ("DBG:: %u \n", l);
+    }
   }
   describe_scores (name, score, cv_name, nbest, nmax, idx, n_idx); // updates list idx[] of references to save
-  if (result) free (result);
   if (score)  free (score);
   return biomcmc_update_elapsed_time (time0); // returns time in seconds
 }
@@ -80,7 +83,7 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
 
   /* 1. find best references using score[0] (ACGT strict match) */
   empfreq_double efd = new_empfreq_double (refnames->nstrings);
-  for (i=0; i < refnames->nstrings; i++) efd->d[i].freq = score[3 * i];
+  for (i=0; i < refnames->nstrings; i++) efd->d[i].freq = score[5 * i];
   sort_empfreq_double_decreasing (efd); 
   best_score = efd->d[0].freq;
   for (i = 0; i < nbest; i++) idbest[i] = efd->d[i].idx;
@@ -92,7 +95,7 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
     empfreq_double efd2 = new_empfreq_double (refnames->nstrings/8);
     for (i=0; i < efd2->n; i++) {
       efd2->d[i].idx = efd->d[i].idx; // idx of seqs with best score
-      efd2->d[i].freq = score[3 * efd->d[i].idx + 1]; // score[1] 
+      efd2->d[i].freq = score[5 * efd->d[i].idx + 1]; // score[1] 
     }
     sort_empfreq_double_decreasing (efd2);
     if (nbest > efd2->n) nbest = efd2->n;
@@ -109,7 +112,7 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
     empfreq_double efd2 = new_empfreq_double (refnames->nstrings/16);
     for (i=0; i < efd2->n; i++) {
       efd2->d[i].idx = efd->d[i].idx; // idx of seqs with best score
-      efd2->d[i].freq = score[3 * efd->d[i].idx + 2]; // score[2] 
+      efd2->d[i].freq = score[5 * efd->d[i].idx + 2]; // score[2] 
     }
     sort_empfreq_double_decreasing (efd2);
     if (nbest > efd2->n) nbest = efd2->n;
@@ -124,8 +127,8 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
   /* 4. idbest[] will have some duplicate ids, we remove those and print in order of frequency (over scores) */
   empfreq bid = new_empfreq_from_int (idbest, n_idbest);
   for (i = 0; i < bid->n; i ++)
-    printf ("%48s, %48s, %15.3lf %15.9lf %15.3lf\n", query_name, refnames->string[bid->i[i].idx], 
-            score[3 * bid->i[i].idx], score[3 * bid->i[i].idx + 1], score[3 * bid->i[i].idx + 2]);
+    printf ("%48s, %48s, %15.1lf %15.8lf %15.3lf\n", query_name, refnames->string[bid->i[i].idx], 
+            score[5 * bid->i[i].idx], score[5 * bid->i[i].idx + 1], score[5 * bid->i[i].idx + 2]);
   fflush(stdout);
 
   (*idx) = (int*) biomcmc_realloc ((int*) (*idx), ((*n_idx) + bid->n) * sizeof (int));
