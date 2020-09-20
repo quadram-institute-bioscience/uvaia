@@ -31,9 +31,9 @@ get_parameters_from_argv (int argc, char **argv)
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
     .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences when several optimal (default=2 x nbest)"),
-    .ref     = arg_file1("r","reference", "<ref.fa|ref.fa.gz>", "_aligned_ reference sequences"),
-    .fasta   = arg_filen(NULL, NULL, "<seqs.fa|seqs.fa.gz>", 1, 1, "_aligned_ sequences to search on references"),
-    .out     = arg_file0("o","output", "<gzipped fasta>", "output reference sequences"),
+    .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
+    .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search on references"),
+    .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "output reference sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
   void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.ref, params.fasta, params.out, params.end};
@@ -115,6 +115,7 @@ main (int argc, char **argv)
   fp = gzopen((char*) params.fasta->filename[0], "r");
   seq = kseq_init(fp); 
 
+  print_score_header ();
   while ((i = kseq_read(seq)) >= 0) 
     t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx);
 

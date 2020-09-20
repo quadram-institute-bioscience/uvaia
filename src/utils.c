@@ -31,14 +31,15 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
 {
   int i;
   int64_t time0[2];
-  double *score, result[3];
+  double *score, *result;
 
   biomcmc_get_time (time0);
   upper_kseq (s, l); // must be _before_ count_sequence
+  result = (double*) biomcmc_malloc (5 * sizeof (double));
   biomcmc_count_sequence_acgt (s, l, result); 
-  if (result[0] < 0.5) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below 50%% threshold\n", name, result[0]); return 0.; }
-  if (result[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above 50%% threshold\n", name, result[2]); return 0.; }
-  score = (double*) biomcmc_malloc (3 * cv_seq->nstrings * sizeof (double)); // 3 scores
+  if (result[0] < 0.5) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below 50%% threshold\n", name, result[0]); free (result); return 0.; }
+  if (result[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above 50%% threshold\n", name, result[2]); free (result); return 0.; }
+  score = (double*) biomcmc_malloc ((3 * cv_seq->nstrings) * sizeof (double)); // 3 scores 
 
   if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size
     biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %lu",
@@ -50,12 +51,14 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
 #pragma omp parallel for shared(score, time0, cv_seq, cv_name) schedule(dynamic)
 #endif
   for (i = 0; i < cv_seq->nstrings; i++) { // openmp doesnt like complex for() loops
-    score[3 * i] = biomcmc_pairwise_score_matches (cv_seq->string[i], s, l, result); // ACGT match
-    score[3 * i + 1] = result[0]; // match between non-N (i.e. include R W etc.)
-    score[3 * i + 2] = result[1]; // unweighted partial matches (e.g. T matches partially with W (T+A) ) 
+    biomcmc_pairwise_score_matches (cv_seq->string[i], s, l, result);
+    score[3 * i] = result[0]; // ACGT match
+    score[3 * i + 1] = result[1]/result[4]; // match between non-N (i.e. include R W etc.) divided by compared sites
+    score[3 * i + 2] = result[2]; // weighted partial matches (e.g. T has 50% match  with W (T+A)) 
   }
   describe_scores (name, score, cv_name, nbest, nmax, idx, n_idx); // updates list idx[] of references to save
-  if (score) free (score);
+  if (result) free (result);
+  if (score)  free (score);
   return biomcmc_update_elapsed_time (time0); // returns time in seconds
 }
 
@@ -84,7 +87,7 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
   for (; (i < nmax) && ((best_score  - efd->d[i].freq) < 1.e-15); i++) idbest[i] = efd->d[i].idx;
   n_idbest = i;
 
-  /* 2. find references using score[1] (non-N matches) excluding lower score[0] sequences */
+  /* 2. find references using score[1]/n_valid (non-N matches over non-N) excluding lower score[0] sequences */
   if (refnames->nstrings > 16) {
     empfreq_double efd2 = new_empfreq_double (refnames->nstrings/8);
     for (i=0; i < efd2->n; i++) {
@@ -121,7 +124,7 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
   /* 4. idbest[] will have some duplicate ids, we remove those and print in order of frequency (over scores) */
   empfreq bid = new_empfreq_from_int (idbest, n_idbest);
   for (i = 0; i < bid->n; i ++)
-    printf ("%48s, %48s, %15lf %15lf %15lf\n", query_name, refnames->string[bid->i[i].idx], 
+    printf ("%48s, %48s, %15.3lf %15.9lf %15.3lf\n", query_name, refnames->string[bid->i[i].idx], 
             score[3 * bid->i[i].idx], score[3 * bid->i[i].idx + 1], score[3 * bid->i[i].idx + 2]);
   fflush(stdout);
 
@@ -135,7 +138,7 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
 void
 print_score_header (void)
 {    
-  printf ("%48s, %48s, %15s %15s %15s\n","query sequence", "reference sequence", "ACGT_matches", "char_matches", "partial_matches");
+  printf ("%48s, %48s, %15s %15s %15s\n","query sequence", "reference sequence", "ACGT_matches", "prop_char_matches", "partial_matches");
 }
 
 void 
@@ -174,6 +177,8 @@ save_sequences (const char *filename, int *idx, int n_idx, char_vector seq, char
 
   del_empfreq (best_ids);
 }
+
+// below are unused/testing functions
 
 bool
 sequence_n_below_threshold (char *seq, int seq_length, double threshold)
@@ -221,3 +226,31 @@ return_query_aligned (int pattern_length, char* text, int text_length, edit_ciga
   text_alg[alg_pos] = '\0';
   return text_alg;
 }
+
+static uint8_t is_acgt[256] = {0xff};
+
+void
+initialise_acgt (void)
+{
+  for (int i = 0; i < 256; i++) is_acgt[i] = 0;
+  is_acgt['A'] = is_acgt['C'] = is_acgt['G'] = is_acgt['T'] = is_acgt['a'] = is_acgt['c'] = is_acgt['g'] = is_acgt['t'] = 1;
+}
+
+void
+compress_kseq_to_acgt (char *s, unsigned *l)
+{
+  unsigned int i, new_l = 0;
+  for (i = 0; i < *l; i++) if (is_acgt[ (int) s[i] ]) s[new_l++] = toupper(s[i]);
+  *l = new_l;
+  //  seq->seq.s = biomcmc_realloc ((char*)seq->seq.s, (new_l + 1) * sizeof (char)); // seq calloc size is seq.m not seq.l
+  s[new_l] = '\0';
+}
+
+double 
+calculate_score_from_cigar (edit_cigar_t* edit_cigar) 
+{
+  int i, matches = 0; 
+  for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) if (edit_cigar->operations[i] == 'M') matches++; 
+  return (double)(matches)/(double)(edit_cigar->end_offset - edit_cigar->begin_offset);
+}
+
