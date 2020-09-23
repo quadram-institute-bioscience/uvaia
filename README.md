@@ -8,8 +8,13 @@ __Leonardo de Oliveira Martins<sup>1</sup>__
 
 Uvaia is an experimental program for pairwise reference-based alignment, and subsequent search against an aligned database. 
 The alignment uses the promising [WFA library](https://github.com/smarco/WFA) implemented by Santiago Marco-Sola, and
-the database search is based on score distances from the 
+the database search is based on score distances from my 
 [biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib) library.
+It also uses the [kseq.h](https://github.com/lh3/seqtk) library, by Heng Li, for reading fasta files.
+
+Uvaia has been developed to help with  SARS-CoV-2 analysis.
+
+(this is still a weekends project so progress may be slow.)
 
 #### Etymology
 [Uvaia (Eugenia_pyriformis)](https://en.wikipedia.org/wiki/Eugenia_pyriformis) (also know as uvaieira, uaieira, ubaia e uvalha) 
@@ -41,6 +46,15 @@ Here is an example of its installation, please modify accordingly.
 /home/simpson/$ make; make install
 /home/simpson/$ make check  # battery of unit and integration tests, not mandatory
 ```
+
+## Running
+
+This is a very beta project so usage may change overnight... in any case, two programs are emerging:
+
+* *uvaialign*, to align your query sequences against a reference genome. Output goes to `stdout` (your screen).
+* *uvaia*, to search for _aligned_ queries against an _aligned_ database. Both query and database fasta files 
+can be aligned to same reference sequence with `mafft`, `viralMSA`, or `uvaialign`. Output is a table of reference
+sequences which are closest neighbours to each query. It can also generate a fasta file with these reference sequences. 
 
 ## License 
 SPDX-License-Identifier: GPL-3.0-or-later
