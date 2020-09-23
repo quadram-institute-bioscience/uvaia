@@ -12,6 +12,7 @@ typedef struct
   struct arg_lit  *version;
   struct arg_int  *nbest;
   struct arg_int  *nmax;
+  struct arg_int  *trim;
   struct arg_file *ref;
   struct arg_file *fasta;
   struct arg_file *out;
@@ -31,21 +32,25 @@ get_parameters_from_argv (int argc, char **argv)
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
     .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences when several optimal (default=2 x nbest)"),
+    .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
     .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search on references"),
     .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "output reference sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.ref, params.fasta, params.out, params.end};
+  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 8; // default values before parsing
-  params.nmax->ival[0] = 0;  // default values before parsing
+  params.nmax->ival[0] = 0;
+  params.trim->ival[0] = 0;
   /* actual parsing: */
   if (arg_nullcheck(params.argtable)) biomcmc_error ("Problem allocating memory for the argtable (command line arguments) structure");
   arg_parse (argc, argv, params.argtable); // returns >0 if errors were found, but this info also on params.end->count
   print_usage (params, argv[0]);
   return params;
 }
+
+// trim for sarscov2: 265 29675
 
 void
 del_arg_parameters (arg_parameters params)
@@ -54,6 +59,7 @@ del_arg_parameters (arg_parameters params)
   if (params.version) free (params.version);
   if (params.nbest) free (params.nbest);
   if (params.nmax) free (params.nmax);
+  if (params.trim) free (params.trim);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.out)   free (params.out);
@@ -91,6 +97,7 @@ main (int argc, char **argv)
   double t_secs = 0.;
   kseq_t *seq;
   gzFile fp;
+  size_t trim;
   char_vector cv_seq, cv_name;
 
   biomcmc_get_time (time0); 
@@ -102,9 +109,18 @@ main (int argc, char **argv)
   /* 1. read reference sequences into char_vectors (ref genome wll be on seq->seq.s and name on seq->name.s) */
   cv_seq  = new_char_vector (1);
   cv_name = new_char_vector (1);
+
   fp = gzopen((char*) params.ref->filename[0], "r");
   seq = kseq_init(fp);
-  while ((i = kseq_read(seq)) >= 0) add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name);
+  while ((i = kseq_read(seq)) >= 0) {
+    if (!cv_seq->next_avail) { // first sequence; used here only to fix trim at given value
+      if (params.trim->ival[0] <= 0) trim = 0; // lower bound is zero (default value)
+      else trim = (size_t) params.trim->ival[0];
+      if (trim > seq->seq.l/3) trim = seq->seq.l/3; // upper bound is 1/3 of genome 
+    }
+    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name);
+  }
+
   gzclose(fp);
   kseq_destroy(seq);
   fprintf (stderr, "finished reading references in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
@@ -117,7 +133,7 @@ main (int argc, char **argv)
 
   print_score_header ();
   while ((i = kseq_read(seq)) >= 0) 
-    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx);
+    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name, params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx);
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 

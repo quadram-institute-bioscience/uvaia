@@ -124,16 +124,25 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
     del_empfreq_double (efd2);
   }
 
-  /* 4. idbest[] will have some duplicate ids, we remove those and print in order of frequency (over scores) */
+  /* 4. idbest[] will have some duplicate ids, we remove those and store in order of frequency (over scores) */
   empfreq bid = new_empfreq_from_int (idbest, n_idbest);
-  for (i = 0; i < bid->n; i ++)
-    printf ("%48s, %48s, %15.1lf %15.8lf %15.3lf\n", query_name, refnames->string[bid->i[i].idx], 
-            score[5 * bid->i[i].idx], score[5 * bid->i[i].idx + 1], score[5 * bid->i[i].idx + 2]);
+  /* 4.1 efd2 will reorder bid by ACGT_match score */ 
+  empfreq_double efd2 = new_empfreq_double (bid->n);
+  for (i=0; i < efd2->n; i++) {
+    efd2->d[i].idx = bid->i[i].idx; // idx of seq to print  
+    efd2->d[i].freq = score[5 * bid->i[i].idx]; // score[0] is ACGT_match 
+  }
+  sort_empfreq_double_decreasing (efd2);
+  /* 4.2 order of efd2 is used to print */
+  for (i = 0; i < bid->n; i ++) 
+    printf ("%48s, %48s, %13.0lf, %13.1lf, %13.8lf, %13.3lf\n", query_name, refnames->string[efd2->d[i].idx],  score[5 * efd2->d[i].idx + 4],
+            score[5 * efd2->d[i].idx], score[5 * efd2->d[i].idx + 1], score[5 * efd2->d[i].idx + 2]);
   fflush(stdout);
 
   (*idx) = (int*) biomcmc_realloc ((int*) (*idx), ((*n_idx) + bid->n) * sizeof (int));
   for (i = 0; i < bid->n; i++) (*idx)[(*n_idx)++] = bid->i[i].idx;
   del_empfreq_double (efd);
+  del_empfreq_double (efd2);
   del_empfreq (bid);
   return;
 }
@@ -141,7 +150,7 @@ describe_scores (char *query_name, double *score, char_vector refnames, int nbes
 void
 print_score_header (void)
 {    
-  printf ("%48s, %48s, %15s %15s %15s\n","query sequence", "reference sequence", "ACGT_matches", "prop_char_matches", "partial_matches");
+  printf ("%48s, %48s, %13s, %13s, %13s, %13s\n","query sequence", "reference sequence", "valid_sites", "ACGT_matches", "prop_char_matches", "partial_matches");
 }
 
 void 
