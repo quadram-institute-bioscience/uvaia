@@ -1,8 +1,8 @@
 AC_INIT([uvaia], [1.0.0], [leomrtns@gmail.com],[], [https://github.com/quadram-institute-bioscience/uvaia])
-AC_CONFIG_AUX_DIR([.])
+AC_CONFIG_HEADER([biomcmc-lib/lib/config.h])
 
+AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_SRCDIR([src/align.c])
-AC_CONFIG_HEADER([src/config.h])
 AC_PREFIX_DEFAULT(${HOME})
 dnl libtoolize recomendation
 AC_CONFIG_MACRO_DIR([m4])
@@ -35,7 +35,20 @@ AC_OPENMP
 AC_SUBST(OPENMP_CFLAGS)
 AC_SUBST(OPENMP_CPPFLAGS)
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.10]) # unit tests in for "make check"
-PKG_CHECK_MODULES([ZLIB], [zlib])
+PKG_CHECK_MODULES([ZLIB], [zlib], 
+                  AC_DEFINE([HAVE_ZLIB],[1],[io gz compression library found]),  
+                  AC_DEFINE([HAVE_ZLIB],[0],[gz compression library not found])
+                  )
+PKG_CHECK_MODULES([LZMA], [liblzma], 
+                  AC_DEFINE([HAVE_LZMA],[1],[io xz compression library found]),  
+                  AC_DEFINE([HAVE_LZMA],[0],[xz compression library not found])
+                  )
+AC_CHECK_HEADER(bzlib.h, 
+                  AC_DEFINE([HAVE_BZIP2],[1],[io bz2 compression library found]),  
+                  AC_DEFINE([HAVE_BZIP2],[0],[bz2 compression library not found])
+                  )
+AC_CHECK_LIB([bz2],[BZ2_bzlibVersion])
+
 AC_MSG_RESULT([ ===  configuration options specific to $PACKAGE_NAME]) # library checks (math etc.) are done by biomcmc-lib
 
 AC_MSG_CHECKING([whether to build (slower) debug code])
@@ -71,10 +84,11 @@ dnl better solution is to allow arbitrary location for biomcmc-lib (it relies on
 AC_CHECK_FILE([${srcdir}/biomcmc-lib],[],[ln -s submodules/biomcmc-lib ${srcdir}/biomcmc-lib])
 AC_CHECK_FILE([${srcdir}/biomcmc-lib/configure.ac],[], [AC_MSG_ERROR(["biomcmc-lib submodule missing, please git clone --recursive or link by hand to location of source code"])])
 dnl Call biomcmc-lib ./configure script recursively.
-AC_CONFIG_SUBDIRS([biomcmc-lib])
+#AC_CONFIG_SUBDIRS([biomcmc-lib])
 AC_SUBST([BIOMCMCLIB], [biomcmc-lib])
 dnl generate makefiles (last recipes, after defining CFLAGS etc.)
-AC_CONFIG_FILES([Makefile src/Makefile submodules/WFA/Makefile])
+AC_CONFIG_FILES([biomcmc-lib/Makefile biomcmc-lib/lib/Makefile biomcmc-lib/tests/Makefile 
+                Makefile src/Makefile submodules/WFA/Makefile])
 AC_OUTPUT
 
 echo \
