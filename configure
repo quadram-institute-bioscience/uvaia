@@ -14809,7 +14809,7 @@ if eval test \"x\$"$as_ac_File"\" = x"yes"; then :
 else
   ln -s submodules/biomcmc-lib ${srcdir}/biomcmc-lib
 fi
-
+ # already checked by autogen.sh
 as_ac_File=`$as_echo "ac_cv_file_${srcdir}/biomcmc-lib/configure.ac" | $as_tr_sh`
 { $as_echo "$as_me:${as_lineno-$LINENO}: checking for ${srcdir}/biomcmc-lib/configure.ac" >&5
 $as_echo_n "checking for ${srcdir}/biomcmc-lib/configure.ac... " >&6; }
@@ -14830,7 +14830,7 @@ $as_echo "$ac_res" >&6; }
 if eval test \"x\$"$as_ac_File"\" = x"yes"; then :
 
 else
-  as_fn_error $? "\"biomcmc-lib submodule missing, please git clone --recursive or link by hand to location of source code\"" "$LINENO" 5
+  as_fn_error $? "\"biomcmc-lib submodule missing, please run \`git submodule update --init --recursive\` or link by hand to location of source code\"" "$LINENO" 5
 fi
 
 #AC_CONFIG_SUBDIRS([biomcmc-lib])

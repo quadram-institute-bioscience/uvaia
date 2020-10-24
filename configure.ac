@@ -1,3 +1,4 @@
+#format("%s",esyscmd("ls"))
 AC_INIT([uvaia], [1.0.0], [leomrtns@gmail.com],[], [https://github.com/quadram-institute-bioscience/uvaia])
 AC_CONFIG_HEADER([biomcmc-lib/lib/config.h])
 
@@ -81,8 +82,8 @@ AC_SUBST([MPI_CXXLIBS])
 AC_SUBST([MPI_CXXFLAGS])
 
 dnl better solution is to allow arbitrary location for biomcmc-lib (it relies on ln)
-AC_CHECK_FILE([${srcdir}/biomcmc-lib],[],[ln -s submodules/biomcmc-lib ${srcdir}/biomcmc-lib])
-AC_CHECK_FILE([${srcdir}/biomcmc-lib/configure.ac],[], [AC_MSG_ERROR(["biomcmc-lib submodule missing, please git clone --recursive or link by hand to location of source code"])])
+AC_CHECK_FILE([${srcdir}/biomcmc-lib],[],[ln -s submodules/biomcmc-lib ${srcdir}/biomcmc-lib]) # already checked by autogen.sh
+AC_CHECK_FILE([${srcdir}/biomcmc-lib/configure.ac],[], [AC_MSG_ERROR(["biomcmc-lib submodule missing, please run `git submodule update --init --recursive` or link by hand to location of source code"])])
 dnl Call biomcmc-lib ./configure script recursively.
 #AC_CONFIG_SUBDIRS([biomcmc-lib])
 AC_SUBST([BIOMCMCLIB], [biomcmc-lib])

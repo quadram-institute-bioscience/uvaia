@@ -42,6 +42,7 @@ Here is an example of its installation, please modify accordingly.
 ```[bash]
 /home/simpson/$ git clone --recursive git@github.com:leomrtns/uvaia.git
 /home/simpson/$ mkdir build && cd build
+/home/simpson/$ ./autogen.sh
 /home/simpson/$ ../uvaia/configure --prefix=${HOME}/local
 /home/simpson/$ make; make install
 /home/simpson/$ make check  # battery of unit and integration tests, not mandatory
