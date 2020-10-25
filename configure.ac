@@ -36,8 +36,9 @@ AC_OPENMP
 AC_SUBST(OPENMP_CFLAGS)
 AC_SUBST(OPENMP_CPPFLAGS)
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.10],  # unit tests in for "make check"
-                  AC_MSG_NOTICE(["testing library `check` found"]),
-                  AC_MSG_NOTICE(["library `check` NOT found, you won't be able to run the battery of tests"]))
+                  [AC_MSG_NOTICE(["testing library `check` found"])],
+                  [AC_MSG_NOTICE(["library `check` NOT found, you won't be able to run the battery of tests"])]
+                  )
 PKG_CHECK_MODULES([ZLIB], [zlib], 
                   AC_DEFINE([HAVE_ZLIB],[1],[]),  
                   AC_DEFINE([HAVE_ZLIB],[0],[set to one if gz compression library found])

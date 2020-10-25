@@ -47,6 +47,8 @@ Here is an example of its installation, please modify accordingly.
 /home/simpson/$ make; make install
 /home/simpson/$ make check  # battery of unit and integration tests, not mandatory
 ```
+Remember that the installation and `autogen.sh` in particular modify/add local files; therefore updating the repository
+from github will complain about uncommited changes. You can run `git stash` (or reinstall from scratch) before `git pull`.
 
 ## Running
 
