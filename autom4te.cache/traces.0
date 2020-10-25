@@ -3343,8 +3343,7 @@ m4trace:configure.ac:38: -1- PKG_CHECK_EXISTS([check >= 0.9.10], [pkg_cv_[]CHECK
 m4trace:configure.ac:38: -1- _PKG_SHORT_ERRORS_SUPPORTED
 m4trace:configure.ac:40: -2- m4_pattern_allow([^HAVE_ZLIB$])
 m4trace:configure.ac:41: -2- m4_pattern_allow([^HAVE_ZLIB$])
-m4trace:configure.ac:39: -1- PKG_CHECK_MODULES([ZLIB], [zlib], [
-$as_echo "@%:@define HAVE_ZLIB 1" >>confdefs.h
+m4trace:configure.ac:39: -1- PKG_CHECK_MODULES([ZLIB], [zlib], [$as_echo "@%:@define HAVE_ZLIB 1" >>confdefs.h
 ], [
 $as_echo "@%:@define HAVE_ZLIB 0" >>confdefs.h
 
@@ -3358,8 +3357,7 @@ m4trace:configure.ac:39: -1- PKG_CHECK_EXISTS([zlib], [pkg_cv_[]ZLIB_LIBS=`$PKG_
 m4trace:configure.ac:39: -1- _PKG_SHORT_ERRORS_SUPPORTED
 m4trace:configure.ac:44: -2- m4_pattern_allow([^HAVE_LZMA$])
 m4trace:configure.ac:45: -2- m4_pattern_allow([^HAVE_LZMA$])
-m4trace:configure.ac:43: -1- PKG_CHECK_MODULES([LZMA], [liblzma], [
-$as_echo "@%:@define HAVE_LZMA 1" >>confdefs.h
+m4trace:configure.ac:43: -1- PKG_CHECK_MODULES([LZMA], [liblzma], [$as_echo "@%:@define HAVE_LZMA 1" >>confdefs.h
 ], [
 $as_echo "@%:@define HAVE_LZMA 0" >>confdefs.h
 

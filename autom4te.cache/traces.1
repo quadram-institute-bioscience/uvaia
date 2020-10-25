@@ -728,11 +728,9 @@ m4trace:configure.ac:38: -1- AC_SUBST_TRACE([CHECK_LIBS])
 m4trace:configure.ac:38: -1- m4_pattern_allow([^CHECK_LIBS$])
 m4trace:configure.ac:40: -2- AC_DEFINE_TRACE_LITERAL([HAVE_ZLIB])
 m4trace:configure.ac:40: -2- m4_pattern_allow([^HAVE_ZLIB$])
-m4trace:configure.ac:40: -2- AH_OUTPUT([HAVE_ZLIB], [/* io gz compression library found */
-@%:@undef HAVE_ZLIB])
 m4trace:configure.ac:41: -2- AC_DEFINE_TRACE_LITERAL([HAVE_ZLIB])
 m4trace:configure.ac:41: -2- m4_pattern_allow([^HAVE_ZLIB$])
-m4trace:configure.ac:41: -2- AH_OUTPUT([HAVE_ZLIB], [/* gz compression library not found */
+m4trace:configure.ac:41: -2- AH_OUTPUT([HAVE_ZLIB], [/* set to one if gz compression library found */
 @%:@undef HAVE_ZLIB])
 m4trace:configure.ac:39: -1- AC_SUBST([ZLIB_CFLAGS])
 m4trace:configure.ac:39: -1- AC_SUBST_TRACE([ZLIB_CFLAGS])
@@ -742,11 +740,9 @@ m4trace:configure.ac:39: -1- AC_SUBST_TRACE([ZLIB_LIBS])
 m4trace:configure.ac:39: -1- m4_pattern_allow([^ZLIB_LIBS$])
 m4trace:configure.ac:44: -2- AC_DEFINE_TRACE_LITERAL([HAVE_LZMA])
 m4trace:configure.ac:44: -2- m4_pattern_allow([^HAVE_LZMA$])
-m4trace:configure.ac:44: -2- AH_OUTPUT([HAVE_LZMA], [/* io xz compression library found */
-@%:@undef HAVE_LZMA])
 m4trace:configure.ac:45: -2- AC_DEFINE_TRACE_LITERAL([HAVE_LZMA])
 m4trace:configure.ac:45: -2- m4_pattern_allow([^HAVE_LZMA$])
-m4trace:configure.ac:45: -2- AH_OUTPUT([HAVE_LZMA], [/* xz compression library not found */
+m4trace:configure.ac:45: -2- AH_OUTPUT([HAVE_LZMA], [/* set to one if xz compression library found */
 @%:@undef HAVE_LZMA])
 m4trace:configure.ac:43: -1- AC_SUBST([LZMA_CFLAGS])
 m4trace:configure.ac:43: -1- AC_SUBST_TRACE([LZMA_CFLAGS])
@@ -756,11 +752,9 @@ m4trace:configure.ac:43: -1- AC_SUBST_TRACE([LZMA_LIBS])
 m4trace:configure.ac:43: -1- m4_pattern_allow([^LZMA_LIBS$])
 m4trace:configure.ac:48: -2- AC_DEFINE_TRACE_LITERAL([HAVE_BZIP2])
 m4trace:configure.ac:48: -2- m4_pattern_allow([^HAVE_BZIP2$])
-m4trace:configure.ac:48: -2- AH_OUTPUT([HAVE_BZIP2], [/* io bz2 compression library found */
-@%:@undef HAVE_BZIP2])
 m4trace:configure.ac:49: -2- AC_DEFINE_TRACE_LITERAL([HAVE_BZIP2])
 m4trace:configure.ac:49: -2- m4_pattern_allow([^HAVE_BZIP2$])
-m4trace:configure.ac:49: -2- AH_OUTPUT([HAVE_BZIP2], [/* bz2 compression library not found */
+m4trace:configure.ac:49: -2- AH_OUTPUT([HAVE_BZIP2], [/* set to one if bz2 compression library found */
 @%:@undef HAVE_BZIP2])
 m4trace:configure.ac:51: -1- AH_OUTPUT([HAVE_LIBBZ2], [/* Define to 1 if you have the `bz2\' library (-lbz2). */
 @%:@undef HAVE_LIBBZ2])

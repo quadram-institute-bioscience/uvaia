@@ -37,16 +37,16 @@ AC_SUBST(OPENMP_CFLAGS)
 AC_SUBST(OPENMP_CPPFLAGS)
 PKG_CHECK_MODULES([CHECK], [check >= 0.9.10]) # unit tests in for "make check"
 PKG_CHECK_MODULES([ZLIB], [zlib], 
-                  AC_DEFINE([HAVE_ZLIB],[1],[io gz compression library found]),  
-                  AC_DEFINE([HAVE_ZLIB],[0],[gz compression library not found])
+                  AC_DEFINE([HAVE_ZLIB],[1],[]),  
+                  AC_DEFINE([HAVE_ZLIB],[0],[set to one if gz compression library found])
                   )
 PKG_CHECK_MODULES([LZMA], [liblzma], 
-                  AC_DEFINE([HAVE_LZMA],[1],[io xz compression library found]),  
-                  AC_DEFINE([HAVE_LZMA],[0],[xz compression library not found])
+                  AC_DEFINE([HAVE_LZMA],[1],[]),  
+                  AC_DEFINE([HAVE_LZMA],[0],[set to one if xz compression library found])
                   )
 AC_CHECK_HEADER(bzlib.h, 
-                  AC_DEFINE([HAVE_BZIP2],[1],[io bz2 compression library found]),  
-                  AC_DEFINE([HAVE_BZIP2],[0],[bz2 compression library not found])
+                  AC_DEFINE([HAVE_BZIP2],[1],[]),  
+                  AC_DEFINE([HAVE_BZIP2],[0],[set to one if bz2 compression library found])
                   )
 AC_CHECK_LIB([bz2],[BZ2_bzlibVersion])
 

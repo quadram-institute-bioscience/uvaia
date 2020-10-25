@@ -14593,8 +14593,7 @@ else
 	ZLIB_LIBS=$pkg_cv_ZLIB_LIBS
         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
-	
-$as_echo "@%:@define HAVE_ZLIB 1" >>confdefs.h
+	$as_echo "@%:@define HAVE_ZLIB 1" >>confdefs.h
 
 fi
 
@@ -14672,14 +14671,12 @@ else
 	LZMA_LIBS=$pkg_cv_LZMA_LIBS
         { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
 $as_echo "yes" >&6; }
-	
-$as_echo "@%:@define HAVE_LZMA 1" >>confdefs.h
+	$as_echo "@%:@define HAVE_LZMA 1" >>confdefs.h
 
 fi
 ac_fn_c_check_header_mongrel "$LINENO" "bzlib.h" "ac_cv_header_bzlib_h" "$ac_includes_default"
 if test "x$ac_cv_header_bzlib_h" = xyes; then :
-  
-$as_echo "@%:@define HAVE_BZIP2 1" >>confdefs.h
+  $as_echo "@%:@define HAVE_BZIP2 1" >>confdefs.h
 
 else
   
