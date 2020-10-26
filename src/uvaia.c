@@ -16,6 +16,7 @@ typedef struct
   struct arg_file *ref;
   struct arg_file *fasta;
   struct arg_file *out;
+  struct arg_int  *threads;
   struct arg_end  *end;
   void **argtable;
 } arg_parameters;
@@ -36,9 +37,10 @@ get_parameters_from_argv (int argc, char **argv)
     .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
     .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search on references"),
     .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "output reference sequences"),
+    .threads = arg_int0("t","nthreads",NULL, "suggested number of threads (default is to let system decide; I may not honour your suggestion btw)"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ref, params.fasta, params.out, params.end};
+  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ref, params.fasta, params.out, params.threads, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 8; // default values before parsing
   params.nmax->ival[0] = 0;
@@ -63,6 +65,7 @@ del_arg_parameters (arg_parameters params)
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.out)   free (params.out);
+  if (params.threads) free (params.threads);
   if (params.end)   free (params.end);
 }
 
@@ -105,6 +108,15 @@ main (int argc, char **argv)
 
   if (params.nbest->ival[0] < 1) params.nbest->ival[0] = 1;
   if (params.nmax->ival[0] < params.nbest->ival[0]) params.nmax->ival[0] = 2 * params.nbest->ival[0];
+
+#ifdef _OPENMP
+  if (params.threads->count) {
+    int max_threads = omp_get_max_threads ();
+    if (params.threads->ival[0] < 1) params.threads->ival[0] = 1; 
+    if (params.threads->ival[0] > max_threads) params.threads->ival[0] = max_threads; 
+    omp_set_num_threads (params.threads->ival[0]);
+  }
+#endif
 
   /* 1. read reference sequences into char_vectors (ref genome wll be on seq->seq.s and name on seq->name.s) */
   cv_seq  = new_char_vector (1);
