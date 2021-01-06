@@ -4,6 +4,8 @@ __Leonardo de Oliveira Martins<sup>1</sup>__
 <br>
 <sub>1. Quadram Institute Bioscience, Norwich Research Park, NR4 7UQ, UK</sub>
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-brightgreen.svg)](https://github.com/quadram-institute-bioscience/tatajuba/blob/master/LICENSE)
+
 ## Introduction
 
 Uvaia is a program for pairwise reference-based alignment, and subsequent search against an aligned database. 
@@ -21,14 +23,25 @@ is a fruit tree typical of Brazil. Its name comes from the tupi *iwa'ya*, which 
 imagination, its [pronunciation] resembles WFA.
 
 ## Installation
-You should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
+### Conda
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/platforms.svg)](https://anaconda.org/bioconda/uvaia)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
+
+After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply run
+```[bash]
+conda install -c bioconda uvaia
+```
+
+### Compiling from source
+If you really want to install it from source, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
 for a **tl;dr**).
 If you forgot to do so, you can update it with
 ```
 git submodule update --init --recursive
 ```
 
-It will compile from the submodules `biomcmc-lib` and `WFA` before finally compiling `uvaia`.
+It will compile from the submodules [biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib) 
+and [our modified WFA](https://github.com/leomrtns/WFA) before finally compiling `uvaia`.
 Notice that executables for other software it relies on are **not** generated, only their libraries are used as dependencies.
 
 This sofware uses `autotools`, which means you can install it with `configure` + `make`.
@@ -39,19 +52,19 @@ environment is `--prefix=${CONDA_PREFIX}`
 Here is an example of its installation, please modify accordingly. 
 
 ```[bash]
-/home/simpson/$ git clone --recursive git@github.com:leomrtns/uvaia.git
+/home/simpson/$ git clone --recursive git@github.com:quadram-institute-bioscience/uvaia.git
+/home/simpson/$ cd uvaia && ./autogen.sh
 /home/simpson/$ mkdir build && cd build
-/home/simpson/$ ./autogen.sh
 /home/simpson/$ ../uvaia/configure --prefix=${HOME}/local
 /home/simpson/$ make; make install
 /home/simpson/$ make check  # battery of unit and integration tests, not mandatory
 ```
 Remember that the installation and `autogen.sh` in particular modify/add local files; therefore updating the repository
 from github will complain about uncommited changes. You can run `git stash` (or reinstall from scratch) before `git pull`.
-
+check the directory [recipe](recipe/) for having a better idea of how conda/docker install it. 
 ## Running
 
-This is a very beta project so usage may change overnight... in any case, two programs are emerging:
+This is still a bit beta so usage may change overnight... in any case, the two main programs are:
 
 * *uvaialign*, to align your query sequences against a reference genome. Output goes to `stdout` (your screen).
 * *uvaia*, to search for _aligned_ queries against an _aligned_ database. Both query and database fasta files 
