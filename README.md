@@ -6,15 +6,14 @@ __Leonardo de Oliveira Martins<sup>1</sup>__
 
 ## Introduction
 
-Uvaia is an experimental program for pairwise reference-based alignment, and subsequent search against an aligned database. 
+Uvaia is a program for pairwise reference-based alignment, and subsequent search against an aligned database. 
 The alignment uses the promising [WFA library](https://github.com/smarco/WFA) implemented by Santiago Marco-Sola, and
 the database search is based on score distances from my 
 [biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib) library.
 It also uses the [kseq.h](https://github.com/lh3/seqtk) library, by Heng Li, for reading fasta files.
 
-Uvaia has been developed to help with  SARS-CoV-2 analysis.
+Uvaia has been developed to help with  SARS-CoV-2 analysis, as a quick replacement for [civet](https://github.com/COG-UK/civet).
 
-(this is still a weekends project so progress may be slow.)
 
 #### Etymology
 [Uvaia (Eugenia_pyriformis)](https://en.wikipedia.org/wiki/Eugenia_pyriformis) (also know as uvaieira, uaieira, ubaia e uvalha) 
@@ -71,6 +70,7 @@ version (http://www.gnu.org/copyleft/gpl.html).
 Tauari uses the library [WFA](https://github.com/smarco/WFA) by Santiago Marco-Sola, distributed under the MIT license.
 It also uses [biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib) by Leonardo de Oliveira Martins
 under a GPL3.0 license. 
+The bearded goat from Uvaia's logo belongs to [Thomas Pennant's Allgemeine Uebersicht der vierfüssigen Thiere](https://www.flickr.com/photos/biodivlibrary/albums/72157715114535503) (public domain). 
 
 ![Anurag's github stats](https://github-readme-stats.vercel.app/api?username=leomrtns&count_private=true&show_icons=true&theme=calm)
 
