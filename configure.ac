@@ -40,19 +40,26 @@ PKG_CHECK_MODULES([CHECK], [check >= 0.9.10],  # unit tests in for "make check"
                   [AC_MSG_NOTICE([library `check` NOT found, you won't be able to run the battery of tests])]
                   )
 PKG_CHECK_MODULES([ZLIB], [zlib], 
-                  AC_DEFINE([HAVE_ZLIB],[1],[]),  
-                  AC_DEFINE([HAVE_ZLIB],[0],[set to one if gz compression library found])
+                  AC_DEFINE([HAVE_ZLIB],[1],[set to one if gz compression library found]),
+                  [AC_MSG_ERROR([zlib library needed, please install it as "zlib1g-dev" in linux, "zlib" in conda])] 
                   )
-PKG_CHECK_MODULES([LZMA], [liblzma], 
-                  AC_DEFINE([HAVE_LZMA],[1],[]),  
-                  AC_DEFINE([HAVE_LZMA],[0],[set to one if xz compression library found])
-                  )
-AC_CHECK_HEADER(bzlib.h, 
-                  AC_DEFINE([HAVE_BZIP2],[1],[]),  
-                  AC_DEFINE([HAVE_BZIP2],[0],[set to one if bz2 compression library found])
-                  )
-AC_SEARCH_LIBS([BZ2_bzlibVersion], [bz2]) # unlike AC_CHECK_LIB, does not set HAVE_LIBBZ2
-AC_SEARCH_LIBS([sqrt], [m])
+PKG_CHECK_MODULES([LZMA], [liblzma],
+                  AC_DEFINE([HAVE_LZMA],[1],[set to one if xz compression library found]),
+                  [AC_MSG_NOTICE([optional lzma headers not found])]   )
+AC_CHECK_HEADER(bzlib.h,
+                  AC_DEFINE([HAVE_BZIP2],[1],[set to one if bz2 compression library found]),
+                  [AC_MSG_NOTICE([optional bzip2 headers not found])]  )
+AC_SEARCH_LIBS([BZ2_bzlibVersion], [bz2]) #  unlike AC_CHECK_LIB, does not define HAVE_LIBBZ2 (thus our custom define above)
+
+dnl a few checks below that are needed by biomcmc 
+AC_SEARCH_LIBS([sqrt], [m])  # modern equivalent of AC_CHECK_LIB ([m],[main])
+AC_SEARCH_LIBS([clock_gettime],[rt])#  clock_gettime function in rt library (linking with -lrt if found)
+AC_HEADER_STDC # Check for the 15 Standard C (ANSI-C/ISO-C) headers
+AC_CHECK_HEADERS(unistd.h sys/time.h sys/times.h) # Check for additional headers
+dnl will add lines #define SIZEOF_INT to config.h etc.
+AC_CHECK_SIZEOF(int)
+AC_CHECK_SIZEOF(double)
+AC_CHECK_SIZEOF(long long int)
 
 AC_MSG_RESULT([ ===  configuration options specific to $PACKAGE_NAME]) # library checks (math etc.) are done by biomcmc-lib
 

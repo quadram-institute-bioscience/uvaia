@@ -53,11 +53,11 @@ void
 print_usage (arg_parameters params, char *progname)
 {
   if (params.version->count) { printf ("%s\n", PACKAGE_VERSION); del_arg_parameters (params); exit (EXIT_SUCCESS); }
-  if (!params.end->count && (!params.help->count)) return;
+  if (!params.end->count && (!params.help->count)) return; // regular run
 
-  if (params.end->count) {  // params.end holds error messages
+  if (params.end->count && (!params.help->count)) {  // params.end holds error messages
+    biomcmc_fprintf_colour (stdout, 0,1, "Error when reading arguments from command line:\n", NULL);
     arg_print_errors(stdout, params.end, basename(progname));
-    printf ("Error when reading arguments from command line\n\n");
   }
 
   printf ("%s \n", PACKAGE_STRING);
@@ -66,9 +66,12 @@ print_usage (arg_parameters params, char *progname)
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
   if (params.help->count) {
-    printf ("Based on the WFA implementation\n");
+    printf ("Based on the WFA implementation https://github.com/smarco/WFA\nOutput is printed to stdout (you should redirect to a file if needed)\n");
   }
-  del_arg_parameters (params); exit (EXIT_SUCCESS);
+
+  del_arg_parameters (params);
+  if (params.end->count && (!params.help->count)) exit (EXIT_FAILURE);
+  exit (EXIT_SUCCESS);
 }
 
 int

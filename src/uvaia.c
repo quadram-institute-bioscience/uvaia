@@ -14,9 +14,9 @@ typedef struct
   struct arg_int  *nmax;
   struct arg_int  *trim;
   struct arg_file *ref;
-  struct arg_file *fasta;
   struct arg_file *out;
   struct arg_int  *threads;
+  struct arg_file *fasta;
   struct arg_end  *end;
   void **argtable;
 } arg_parameters;
@@ -33,14 +33,14 @@ get_parameters_from_argv (int argc, char **argv)
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
     .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences when several optimal (default=2 x nbest)"),
-    .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
+    .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230) -- MAY CONTAIN BUGS"),
     .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
-    .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search on references"),
     .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "output reference sequences"),
     .threads = arg_int0("t","nthreads",NULL, "suggested number of threads (default is to let system decide; I may not honour your suggestion btw)"),
+    .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search for neighbour references"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ref, params.fasta, params.out, params.threads, params.end};
+  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ref, params.out, params.threads, params.fasta, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 8; // default values before parsing
   params.nmax->ival[0] = 0;
@@ -75,9 +75,9 @@ print_usage (arg_parameters params, char *progname)
   if (params.version->count) { printf ("%s\n", PACKAGE_VERSION); del_arg_parameters (params); exit (EXIT_SUCCESS); }
   if (!params.end->count && (!params.help->count)) return;
 
-  if (params.end->count) {  // params.end holds error messages
+  if (params.end->count && (!params.help->count)) {  // params.end holds error messages
+    biomcmc_fprintf_colour (stdout, 0,1, "Error when reading arguments from command line:\n", NULL);
     arg_print_errors(stdout, params.end, basename(progname));
-    printf ("Error when reading arguments from command line\n\n");
   }
 
   printf ("%s \n", PACKAGE_STRING);
@@ -87,9 +87,12 @@ print_usage (arg_parameters params, char *progname)
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
   if (params.help->count) {
-    printf ("Somehow assumes close sequences (it's being developed in the SARS-CoV-2 context)\n");
+    printf ("Assumes relatively close sequences (e.g. in the SARS-CoV-2 context)\n");
+    printf ("Outputs a table with closest sequences to stdout, please redirect as appropriate\n");
   }
-  del_arg_parameters (params); exit (EXIT_SUCCESS);
+  del_arg_parameters (params);
+  if (params.end->count && (!params.help->count)) exit (EXIT_FAILURE);
+  exit (EXIT_SUCCESS);
 }
 
 int
