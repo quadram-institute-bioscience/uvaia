@@ -13,6 +13,7 @@ typedef struct
   struct arg_int  *nbest;
   struct arg_int  *nmax;
   struct arg_int  *trim;
+  struct arg_dbl  *ambig;
   struct arg_file *ref;
   struct arg_file *out;
   struct arg_int  *threads;
@@ -34,17 +35,19 @@ get_parameters_from_argv (int argc, char **argv)
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
     .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences when several optimal (default=2 x nbest)"),
     .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230) -- MAY CONTAIN BUGS"),
+    .ambig   = arg_dbl0("a","ambiguity", NULL, "maximum allowed ambiguity for sequence to be excluded (default=0.5)"),
     .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
-    .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "output reference sequences"),
+    .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "GZIPPED output reference sequences (default is to not save sequences)"),
     .threads = arg_int0("t","nthreads",NULL, "suggested number of threads (default is to let system decide; I may not honour your suggestion btw)"),
     .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search for neighbour references"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ref, params.out, params.threads, params.fasta, params.end};
+  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ambig, params.ref, params.out, params.threads, params.fasta, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 8; // default values before parsing
   params.nmax->ival[0] = 0;
   params.trim->ival[0] = 0;
+  params.ambig->dval[0] = 0.5;
   /* actual parsing: */
   if (arg_nullcheck(params.argtable)) biomcmc_error ("Problem allocating memory for the argtable (command line arguments) structure");
   arg_parse (argc, argv, params.argtable); // returns >0 if errors were found, but this info also on params.end->count
@@ -62,6 +65,7 @@ del_arg_parameters (arg_parameters params)
   if (params.nbest) free (params.nbest);
   if (params.nmax) free (params.nmax);
   if (params.trim) free (params.trim);
+  if (params.ambig) free (params.ambig);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.out)   free (params.out);
@@ -111,6 +115,8 @@ main (int argc, char **argv)
 
   if (params.nbest->ival[0] < 1) params.nbest->ival[0] = 1;
   if (params.nmax->ival[0] < params.nbest->ival[0]) params.nmax->ival[0] = 2 * params.nbest->ival[0];
+  if (params.ambig->dval[0] < 0.001) params.ambig->dval[0] = 0.001;
+  if (params.ambig->dval[0] > 1.)    params.ambig->dval[0] = 1.;
 
 #ifdef _OPENMP
   if (params.threads->count) {
@@ -133,7 +139,7 @@ main (int argc, char **argv)
       else trim = (size_t) params.trim->ival[0];
       if (trim > seq->seq.l/3) trim = seq->seq.l/3; // upper bound is 1/3 of genome 
     }
-    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name);
+    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name, params.ambig->dval[0]);
   }
 
   gzclose(fp);
@@ -148,7 +154,8 @@ main (int argc, char **argv)
 
   print_score_header ();
   while ((i = kseq_read(seq)) >= 0) 
-    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name, params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx);
+    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name, params.nbest->ival[0], 
+                                                 params.nmax->ival[0], &idx, &n_idx, params.ambig->dval[0]);
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 

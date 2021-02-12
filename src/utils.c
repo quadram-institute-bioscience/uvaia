@@ -10,7 +10,7 @@ bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
 
 
 void
-add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name)
+add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, double ambiguity)
 {
   double result[3];
   if (cv_seq->next_avail && (cv_seq->nchars[cv_seq->next_avail-1] != (size_t) l)) {
@@ -20,14 +20,15 @@ add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vect
   }
   upper_kseq (s, l); // must be _before_ count_sequence
   biomcmc_count_sequence_acgt (s, l, result); 
-  if (result[0] < 0.5) { fprintf (stderr, "Reference %s has proportion of ACGT (=%lf) below 50%% threshold\n", name, result[0]); return; }
-  if (result[2] > 0.5) { fprintf (stderr, "Reference %s has proportion of N etc. (=%lf) above 50%% threshold\n", name, result[2]); return; }
+  if (result[0] < ambiguity) { fprintf (stderr, "Reference %s has proportion of ACGT (=%lf) below threshold of %lf\n", name, result[0], ambiguity); return; }
+  if (result[2] > ambiguity) { fprintf (stderr, "Reference %s has proportion of N etc. (=%lf) above threshold of %lf\n", name, result[2], ambiguity); return; }
+  s[l] = '\0'; // otherwise char_vector will copy everything up to end of sequence s (it does not know about lenght l) 
   char_vector_add_string (cv_seq,  s);
   char_vector_add_string (cv_name, name);
 }
 
 double
-query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx)
+query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx, double ambiguity)
 {
   int i;
   int64_t time0[2];
@@ -38,8 +39,8 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
   score = (double*) biomcmc_malloc ((5 * cv_seq->nstrings) * sizeof (double)); // 3 scores but we need 5 for openMP
 
   biomcmc_count_sequence_acgt (s, l, score); // score[] used temporarily here
-  if (score[0] < 0.5) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below 50%% threshold\n", name, score[0]); free (score); return 0.; }
-  if (score[2] > 0.5) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above 50%% threshold\n", name, score[2]); free (score); return 0.; }
+  if (score[0] < ambiguity) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below threshold (%lf)\n", name, score[0], ambiguity); free (score); return 0.; }
+  if (score[2] > ambiguity) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above threshold (%lf)\n", name, score[2], ambiguity); free (score); return 0.; }
 
   if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size
     biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %lu",

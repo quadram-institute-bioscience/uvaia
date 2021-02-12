@@ -8,6 +8,7 @@ typedef struct
 {
   struct arg_lit  *help;
   struct arg_lit  *version;
+  struct arg_dbl  *ambig;
   struct arg_file *ref;
   struct arg_file *fasta;
   struct arg_end  *end;
@@ -26,12 +27,14 @@ get_parameters_from_argv (int argc, char **argv)
   arg_parameters params = {
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
+    .ambig   = arg_dbl0("a","ambiguity", NULL, "maximum allowed ambiguity for sequence to be excluded (default=0.5)"),
     .ref     = arg_file1("r","reference", "<ref.fa|ref.fa.gz>", "reference sequence"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa|seqs.fa.gz>", 1, 1, "sequences to align"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.ref, params.fasta, params.end};
+  void* argtable[] = {params.help, params.version, params.ambig, params.ref, params.fasta, params.end};
   params.argtable = argtable; 
+  params.ambig->dval[0] = 0.5;
   /* actual parsing: */
   if (arg_nullcheck(params.argtable)) biomcmc_error ("Problem allocating memory for the argtable (command line arguments) structure");
   arg_parse (argc, argv, params.argtable); // returns >0 if errors were found, but this info also on params.end->count
@@ -44,6 +47,7 @@ del_arg_parameters (arg_parameters params)
 {
   if (params.help)  free (params.help);
   if (params.version) free (params.version);
+  if (params.ambig) free (params.ambig);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.end)   free (params.end);
@@ -89,6 +93,9 @@ main (int argc, char **argv)
 
   time0 = clock ();
   arg_parameters params = get_parameters_from_argv (argc, argv);
+
+  if (params.ambig->dval[0] < 0.001) params.ambig->dval[0] = 0.001;
+  if (params.ambig->dval[0] > 1.)    params.ambig->dval[0] = 1.;
   
   /* 1. read reference sequence (ref genome wll be on ref->seq.s and name on ref->name.s) */
   fp = gzopen((char*) params.ref->filename[0], "r");
@@ -104,7 +111,7 @@ main (int argc, char **argv)
   seq = kseq_init(fp); 
 
   while ((i = kseq_read(seq)) >= 0) { // one query per iteration
-    if (sequence_n_below_threshold (seq->seq.s, seq->seq.l, 0.5)) { 
+    if (sequence_n_below_threshold (seq->seq.s, seq->seq.l, params.ambig->dval[0])) { 
       /* 2.1 reset wfa struct and align each seq->seq against ref->seq */
       affine_wavefronts_clear (affine_wavefronts);
       affine_wavefronts_align (affine_wavefronts, ref->seq.s, ref->seq.l, seq->seq.s, seq->seq.l);
@@ -113,7 +120,7 @@ main (int argc, char **argv)
       printf (">%s\n%s\n", seq->name.s, aln_sequence);
       mm_allocator_free (mm_allocator, aln_sequence); // delete aln_sequence memory, that was allocated within allocator
     }
-    else fprintf (stderr, "Sequence %s is too ambiguous\n", seq->name.s);
+    else fprintf (stderr, "Sequence %s is too ambiguous (below %lf)\n", seq->name.s, params.ambig->dval[0]);
   }
 
   time1 = clock (); fprintf (stderr, "finished in  %lf secs\n",  (double)(time1-time0)/(double)(CLOCKS_PER_SEC)); fflush(stderr); 
