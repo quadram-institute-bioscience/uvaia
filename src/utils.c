@@ -28,7 +28,7 @@ add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vect
 }
 
 double
-query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx, double ambiguity)
+query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx, double ambiguity, size_t trim)
 {
   int i;
   int64_t time0[2];
@@ -42,24 +42,21 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
   if (score[0] < ambiguity) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below threshold (%lf)\n", name, score[0], ambiguity); free (score); return 0.; }
   if (score[2] > ambiguity) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above threshold (%lf)\n", name, score[2], ambiguity); free (score); return 0.; }
 
-  if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size
-    biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequence %s has length %lu",
-                     name, l, cv_name->string[0], cv_seq->nchars[0]);
-    biomcmc_error ("Soon we'll be able to align ourselves ;)");
+  if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size // FIXME: no need to return error; just skip this one
+    biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequences have length %lu", name, l, cv_seq->nchars[0]);
+    if (score) free (score);
+    return biomcmc_update_elapsed_time (time0); // returns time in seconds
   }
 
 #ifdef _OPENMP
 #pragma omp parallel for shared(score, time0, cv_seq, cv_name) schedule(dynamic)
 #endif
   for (i = 0; i < cv_seq->nstrings; i++) { // openmp doesnt like complex for() loops
-    biomcmc_pairwise_score_matches (cv_seq->string[i], s, l, score + (5 * i));
+    biomcmc_pairwise_score_matches (cv_seq->string[i] + trim, s + trim, l - 2 * trim, score + (5 * i));
 //    score[5 * i] = result[0]; // ACGT match
     score[5 * i + 1] /= score[5 * i + 4]; // match between non-N (i.e. include R W etc.) divided by compared sites
 //    score[5 * i + 2] = result[2]; // weighted partial matches (e.g. T has 50% match  with W (T+A)) 
-    if (score[5*i+2] < 1.) {
-      for (int j=0; j < 5; j++) printf ("%lf ", score[5*i + j]);
-      printf ("DBG:: %u \n", l);
-    }
+//    if (score[5*i+2] < 1.) { for (int j=0; j < 5; j++) printf ("%lf ", score[5*i + j]); printf ("DBG:: %u \n", l); }
   }
   describe_scores (name, score, cv_name, nbest, nmax, idx, n_idx); // updates list idx[] of references to save
   if (score)  free (score);

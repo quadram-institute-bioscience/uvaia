@@ -34,7 +34,7 @@ get_parameters_from_argv (int argc, char **argv)
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
     .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences when several optimal (default=2 x nbest)"),
-    .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230) -- MAY CONTAIN BUGS"),
+    .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig   = arg_dbl0("a","ambiguity", NULL, "maximum allowed ambiguity for sequence to be excluded (default=0.5)"),
     .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
     .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "GZIPPED output reference sequences (default is to not save sequences)"),
@@ -137,9 +137,9 @@ main (int argc, char **argv)
     if (!cv_seq->next_avail) { // first sequence; used here only to fix trim at given value
       if (params.trim->ival[0] <= 0) trim = 0; // lower bound is zero (default value)
       else trim = (size_t) params.trim->ival[0];
-      if (trim > seq->seq.l/3) trim = seq->seq.l/3; // upper bound is 1/3 of genome 
+      if (trim > seq->seq.l/2.1) trim = seq->seq.l/2.1; // if we trim more than 1/2 the genome there's nothing left
     }
-    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name, params.ambig->dval[0]);
+    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.ambig->dval[0]);
   }
 
   gzclose(fp);
@@ -154,8 +154,8 @@ main (int argc, char **argv)
 
   print_score_header ();
   while ((i = kseq_read(seq)) >= 0) 
-    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s + trim, seq->seq.l - 2 * trim, cv_seq, cv_name, params.nbest->ival[0], 
-                                                 params.nmax->ival[0], &idx, &n_idx, params.ambig->dval[0]);
+    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.nbest->ival[0], 
+                                                 params.nmax->ival[0], &idx, &n_idx, params.ambig->dval[0], trim);
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 
