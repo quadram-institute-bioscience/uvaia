@@ -131,7 +131,10 @@ main (int argc, char **argv)
   cv_seq  = new_char_vector (1);
   cv_name = new_char_vector (1);
 
+  fp = NULL;
   fp = gzopen((char*) params.ref->filename[0], "r");
+  if (!fp)  biomcmc_error ("Could not open reference file %s.", params.ref->filename[0]);
+
   seq = kseq_init(fp);
   while ((i = kseq_read(seq)) >= 0) {
     if (!cv_seq->next_avail) { // first sequence; used here only to fix trim at given value
@@ -144,13 +147,17 @@ main (int argc, char **argv)
 
   gzclose(fp);
   kseq_destroy(seq);
-  fprintf (stderr, "finished reading references in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  fprintf (stderr, "finished reading %d valid references in %lf secs\n", cv_seq->nstrings, biomcmc_update_elapsed_time (time0)); fflush(stderr);
 
   if (cv_seq->nstrings < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.ref->filename[0]);
 
   /* 2. read each query sequence and align against reference */
+  fp = NULL;
   fp = gzopen((char*) params.fasta->filename[0], "r");
+  if (!fp)  biomcmc_error ("Could not open query file %s.", params.fasta->filename[0]);
+  seq = NULL;
   seq = kseq_init(fp); 
+  if (!seq)  biomcmc_error ("Query file %s was not recognised as fasta (or zipped fasta).", params.fasta->filename[0]);
 
   print_score_header ();
   while ((i = kseq_read(seq)) >= 0) 
