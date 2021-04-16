@@ -21,7 +21,7 @@ add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vect
   upper_kseq (s, l); // must be _before_ count_sequence
   biomcmc_count_sequence_acgt (s, l, result); 
   if (result[0] < 1. - ambiguity) { fprintf (stderr, "Reference %s has proportion of ACGT (=%lf) below threshold of %lf\n", name, result[0], 1. - ambiguity); return; }
-  if (result[2] > 0.9 * ambiguity) { fprintf (stderr, "Reference %s has proportion of N etc. (=%lf) above threshold of %lf\n", name, result[2], 0.9 * ambiguity); return; }
+  if (result[2] > 0.99 * ambiguity) { fprintf (stderr, "Reference %s has proportion of N etc. (=%lf) above threshold of %lf\n", name, result[2], 0.99 * ambiguity); return; }
   s[l] = '\0'; // otherwise char_vector will copy everything up to end of sequence s (it does not know about lenght l) 
   char_vector_add_string (cv_seq,  s);
   char_vector_add_string (cv_name, name);
@@ -40,7 +40,7 @@ query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector 
 
   biomcmc_count_sequence_acgt (s, l, score); // score[] used temporarily here
   if (score[0] < 1. - ambiguity) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below threshold (%lf)\n", name, score[0], 1. - ambiguity); free (score); return 0.; }
-  if (score[2] > 0.9 * ambiguity) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above threshold (%lf)\n", name, score[2], 0.9 * ambiguity); free (score); return 0.; }
+  if (score[2] > 0.99 * ambiguity) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above threshold (%lf)\n", name, score[2], 0.99 * ambiguity); free (score); return 0.; }
 
   if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size // FIXME: no need to return error; just skip this one
     biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequences have length %lu", name, l, cv_seq->nchars[0]);
