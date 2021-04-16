@@ -13,7 +13,8 @@ typedef struct
   struct arg_int  *nbest;
   struct arg_int  *nmax;
   struct arg_int  *trim;
-  struct arg_dbl  *ambig;
+  struct arg_dbl  *ambig_r;
+  struct arg_dbl  *ambig_q;
   struct arg_file *ref;
   struct arg_file *out;
   struct arg_int  *threads;
@@ -35,19 +36,21 @@ get_parameters_from_argv (int argc, char **argv)
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to show (default=8)"),
     .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences when several optimal (default=2 x nbest)"),
     .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
-    .ambig   = arg_dbl0("a","ambiguity", NULL, "maximum allowed ambiguity for sequence to be excluded (default=0.5)"),
+    .ambig_r = arg_dbl0("A","ref_ambiguity",   NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
+    .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
     .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
     .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "GZIPPED output reference sequences (default is to not save sequences)"),
     .threads = arg_int0("t","nthreads",NULL, "suggested number of threads (default is to let system decide; I may not honour your suggestion btw)"),
     .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search for neighbour references"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ambig, params.ref, params.out, params.threads, params.fasta, params.end};
+  void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ambig_r, params.ambig_q, params.ref, params.out, params.threads, params.fasta, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 8; // default values before parsing
   params.nmax->ival[0] = 0;
   params.trim->ival[0] = 0;
-  params.ambig->dval[0] = 0.5;
+  params.ambig_r->dval[0] = 0.5;
+  params.ambig_q->dval[0] = 0.5;
   /* actual parsing: */
   if (arg_nullcheck(params.argtable)) biomcmc_error ("Problem allocating memory for the argtable (command line arguments) structure");
   arg_parse (argc, argv, params.argtable); // returns >0 if errors were found, but this info also on params.end->count
@@ -65,7 +68,8 @@ del_arg_parameters (arg_parameters params)
   if (params.nbest) free (params.nbest);
   if (params.nmax) free (params.nmax);
   if (params.trim) free (params.trim);
-  if (params.ambig) free (params.ambig);
+  if (params.ambig_r) free (params.ambig_r);
+  if (params.ambig_q) free (params.ambig_q);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.out)   free (params.out);
@@ -91,8 +95,10 @@ print_usage (arg_parameters params, char *progname)
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
   if (params.help->count) {
-    printf ("Assumes relatively close sequences (e.g. in the SARS-CoV-2 context)\n");
+    printf ("Assumes relatively close sequences (e.g. in the SARS-CoV-2 context). ");
     printf ("Outputs a table with closest sequences to stdout, please redirect as appropriate\n");
+    printf ("The ambiguities are the highest proportion of Ns allowed; It assumes that the non-Ns are at least 90%% ACGT.\n");
+
   }
   del_arg_parameters (params);
   if (params.end->count && (!params.help->count)) exit (EXIT_FAILURE);
@@ -115,8 +121,10 @@ main (int argc, char **argv)
 
   if (params.nbest->ival[0] < 1) params.nbest->ival[0] = 1;
   if (params.nmax->ival[0] < params.nbest->ival[0]) params.nmax->ival[0] = 2 * params.nbest->ival[0];
-  if (params.ambig->dval[0] < 0.001) params.ambig->dval[0] = 0.001;
-  if (params.ambig->dval[0] > 1.)    params.ambig->dval[0] = 1.;
+  if (params.ambig_r->dval[0] < 0.001) params.ambig_r->dval[0] = 0.001;
+  if (params.ambig_r->dval[0] > 1.)    params.ambig_r->dval[0] = 1.;
+  if (params.ambig_q->dval[0] < 0.001) params.ambig_q->dval[0] = 0.001;
+  if (params.ambig_q->dval[0] > 1.)    params.ambig_q->dval[0] = 1.;
 
 #ifdef _OPENMP
   if (params.threads->count) {
@@ -142,7 +150,7 @@ main (int argc, char **argv)
       else trim = (size_t) params.trim->ival[0];
       if (trim > seq->seq.l/2.1) trim = seq->seq.l/2.1; // if we trim more than 1/2 the genome there's nothing left
     }
-    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.ambig->dval[0]);
+    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.ambig_r->dval[0]);
   }
 
   gzclose(fp);
@@ -162,7 +170,7 @@ main (int argc, char **argv)
   print_score_header ();
   while ((i = kseq_read(seq)) >= 0) 
     t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.nbest->ival[0], 
-                                                 params.nmax->ival[0], &idx, &n_idx, params.ambig->dval[0], trim);
+                                                 params.nmax->ival[0], &idx, &n_idx, params.ambig_q->dval[0], trim);
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 

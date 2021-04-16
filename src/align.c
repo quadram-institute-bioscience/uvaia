@@ -85,6 +85,7 @@ main (int argc, char **argv)
   clock_t time0, time1;
   kseq_t *seq, *ref;
   gzFile fp;
+  double result[3];
   char *aln_sequence = NULL;
 
   mm_allocator_t* const mm_allocator = mm_allocator_new(BUFFER_SIZE_8M);
@@ -111,7 +112,12 @@ main (int argc, char **argv)
   seq = kseq_init(fp); 
 
   while ((i = kseq_read(seq)) >= 0) { // one query per iteration
-    if (sequence_n_below_threshold (seq->seq.s, seq->seq.l, params.ambig->dval[0])) { 
+    biomcmc_count_sequence_acgt (seq->seq.s, seq->seq.l, result); 
+    if (result[2] > params.ambig->dval[0]) 
+      fprintf (stderr, "Sequence %s has proportion of N etc. (=%lf) above threshold of %lf\n", seq->name.s, result[2], params.ambig->dval[0]);
+    else if (result[0] < 1. - 1.1 * params.ambig->dval[0]) 
+      fprintf (stderr, "Sequence %s has proportion of ACGT (=%lf) below threshold of %lf\n", seq->name.s, result[0], 1. - 1.1 * params.ambig->dval[0]);
+    else {    //if (sequence_n_below_threshold (seq->seq.s, seq->seq.l, params.ambig->dval[0])) { 
       /* 2.1 reset wfa struct and align each seq->seq against ref->seq */
       affine_wavefronts_clear (affine_wavefronts);
       affine_wavefronts_align (affine_wavefronts, ref->seq.s, ref->seq.l, seq->seq.s, seq->seq.l);
@@ -120,7 +126,6 @@ main (int argc, char **argv)
       printf (">%s\n%s\n", seq->name.s, aln_sequence);
       mm_allocator_free (mm_allocator, aln_sequence); // delete aln_sequence memory, that was allocated within allocator
     }
-    else fprintf (stderr, "Sequence %s is too ambiguous (below %lf)\n", seq->name.s, params.ambig->dval[0]);
   }
 
   time1 = clock (); fprintf (stderr, "finished in  %lf secs\n",  (double)(time1-time0)/(double)(CLOCKS_PER_SEC)); fflush(stderr); 
