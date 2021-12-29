@@ -10,7 +10,7 @@
 #include "kseq.h"
 
 
-void add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, double ambiguity);
+void uvaia_keep_only_valid_sequences (alignment aln, double ambiguity);
 double query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, 
                                           int nbest, int nmax, int **idx, int *n_idx, double ambiguity, size_t trim);
 void print_score_header (void);

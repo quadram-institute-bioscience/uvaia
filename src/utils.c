@@ -10,21 +10,43 @@ bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
 
 
 void
-add_reference_genome_to_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, double ambiguity)
+uvaia_keep_only_valid_sequences (alignment aln, double ambiguity)
 {
   double result[3];
-  if (cv_seq->next_avail && (cv_seq->nchars[cv_seq->next_avail-1] != (size_t) l)) {
-    biomcmc_warning ("This program assumes aligned reference sequences, and sequence %s has length %u while sequence %s has length %lu\n",
-                     name, l, cv_name->string[cv_seq->next_avail-1], cv_seq->nchars[cv_seq->next_avail-1]);
-    biomcmc_error ("You can use uvaia_align (or mafft, or minimap2) to align them against the same reference");
+  int i, *valid = NULL, n_valid=0, maxlength = 0;
+  valid = (int*) biomcmc_malloc (aln->ntax * sizeof (int));
+
+  for (i=0; i < aln->character->nstrings; i++) {
+    if (aln->character->nchars[i] < 5) {
+      fprintf (stderr, "Sequence %s is too short ( = %lu sites), limit is hardcoded at 5bps.\n", aln->taxlabel->string[i], aln->character->nchars[i]);
+      continue;
+    }
+    upper_kseq (aln->character->string[i], aln->character->nchars[i]); // must be _before_ count_sequence
+    biomcmc_count_sequence_acgt (aln->character->string[i], aln->character->nchars[i], result); 
+    if (result[2] > ambiguity) { 
+      fprintf (stderr, "Sequence %s has proportion of N etc. (=%lf) above threshold of %lf\n", aln->taxlabel->string[i], result[2], ambiguity);
+      continue;
+    }
+    if (result[0] < 1. - 1.1 * ambiguity) { 
+      fprintf (stderr, "Sequence %s has proportion of ACGT (=%lf) below threshold of %lf\n", aln->taxlabel->string[i], result[0], 1. - 1.1 * ambiguity); 
+      continue;
+    }
+    valid[n_valid++] = i;
+    if (!maxlength) maxlength = aln->character->nchars[i];
+    else if ((maxlength != -1) && ((size_t) maxlength != aln->character->nchars[i])) maxlength = -1;
+  } // for each string
+  
+  /* check if remaining sequences have same length (if aln->is_aligned is true it implies patterns are used, which we don't here) */
+  if (maxlength == -1) {
+    biomcmc_warning ("Reference sequences in file %s are not aligned.\n", aln->filename);
+    del_alignment (aln);
+    biomcmc_error ("You can use uvaialign (or mafft, or minimap2) to align them against the same reference.");
   }
-  upper_kseq (s, l); // must be _before_ count_sequence
-  biomcmc_count_sequence_acgt (s, l, result); 
-  if (result[2] > ambiguity) { fprintf (stderr, "Reference %s has proportion of N etc. (=%lf) above threshold of %lf\n", name, result[2], ambiguity); return; }
-  if (result[0] < 1. - 1.1 * ambiguity) { fprintf (stderr, "Reference %s has proportion of ACGT (=%lf) below threshold of %lf\n", name, result[0], 1. - 1.1 * ambiguity); return; }
-  s[l] = '\0'; // otherwise char_vector will copy everything up to end of sequence s (it does not know about lenght l) 
-  char_vector_add_string (cv_seq,  s);
-  char_vector_add_string (cv_name, name);
+
+  /* alignment will not be fully functional since we dont update taxshort and taxlabel_hash  */
+  char_vector_reduce_to_valid_strings (aln->character, valid, n_valid);
+  char_vector_reduce_to_valid_strings (aln->taxlabel, valid, n_valid);
+  aln->ntax = n_valid;
 }
 
 double
@@ -183,7 +205,7 @@ save_sequences (const char *filename, int *idx, int n_idx, char_vector seq, char
   qsort (idx, n_idx, sizeof (int), compare_int_increasing); // char_vector_reduce() assumes ordered idx of valid
   char_vector_reduce_to_valid_strings (seq, idx, n_idx);
   char_vector_reduce_to_valid_strings (name, idx, n_idx);
-  save_gzfasta_from_char_vector (filename, name, seq);
+  save_xzfasta_from_char_vector (filename, name, seq);
 
   del_empfreq (best_ids);
 }

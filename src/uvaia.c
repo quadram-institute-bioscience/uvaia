@@ -39,9 +39,9 @@ get_parameters_from_argv (int argc, char **argv)
     .ambig_r = arg_dbl0("A","ref_ambiguity",   NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
     .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
-    .out     = arg_file0("o","output", "[chosen_refs.fa.gz]", "GZIPPED output reference sequences (default is to not save sequences)"),
+    .out     = arg_file0("o","output", "[chosen_refs.fa.xz]", "XZIPPED (LZMA) output reference sequences (default is to not save sequences)"),
     .threads = arg_int0("t","nthreads",NULL, "suggested number of threads (default is to let system decide; I may not honour your suggestion btw)"),
-    .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz)]", 1, 1, "*aligned* sequences to search for neighbour references"),
+    .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz,.xz)]", 1, 1, "*aligned* sequences to search for neighbour references"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
   void* argtable[] = {params.help, params.version, params.nbest, params.nmax, params.trim, params.ambig_r, params.ambig_q, params.ref, params.out, params.threads, params.fasta, params.end};
@@ -114,7 +114,8 @@ main (int argc, char **argv)
   kseq_t *seq;
   gzFile fp;
   size_t trim;
-  char_vector cv_seq, cv_name;
+  //char_vector cv_seq, cv_name;
+  alignment refaln;
 
   biomcmc_get_time (time0); 
   arg_parameters params = get_parameters_from_argv (argc, argv);
@@ -136,28 +137,17 @@ main (int argc, char **argv)
 #endif
 
   /* 1. read reference sequences into char_vectors (ref genome wll be on seq->seq.s and name on seq->name.s) */
-  cv_seq  = new_char_vector (1);
-  cv_name = new_char_vector (1);
+  refaln = read_fasta_alignment_from_file ((char*)params.ref->filename[0], false); // false -> do not compact patterns
 
-  fp = NULL;
-  fp = gzopen((char*) params.ref->filename[0], "r");
-  if (!fp)  biomcmc_error ("Could not open reference file %s.", params.ref->filename[0]);
+  if (params.trim->ival[0] <= 0) trim = 0; // lower bound is zero (default value)
+  else trim = (size_t) params.trim->ival[0];
+  if (trim > refaln->nchar / 2.1) trim = refaln->nchar / 2.1; // if we trim more than 1/2 the genome there's nothing left
+  fprintf (stderr, "Finished reading %d reference references in %lf secs; now will exclude low quality sequences\n", refaln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  
+  uvaia_keep_only_valid_sequences (refaln, params.ambig_r->dval[0]);
 
-  seq = kseq_init(fp);
-  while ((i = kseq_read(seq)) >= 0) {
-    if (!cv_seq->next_avail) { // first sequence; used here only to fix trim at given value
-      if (params.trim->ival[0] <= 0) trim = 0; // lower bound is zero (default value)
-      else trim = (size_t) params.trim->ival[0];
-      if (trim > seq->seq.l/2.1) trim = seq->seq.l/2.1; // if we trim more than 1/2 the genome there's nothing left
-    }
-    add_reference_genome_to_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.ambig_r->dval[0]);
-  }
-
-  gzclose(fp);
-  kseq_destroy(seq);
-  fprintf (stderr, "finished reading %d valid references in %lf secs\n", cv_seq->nstrings, biomcmc_update_elapsed_time (time0)); fflush(stderr);
-
-  if (cv_seq->nstrings < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.ref->filename[0]);
+  fprintf (stderr, "Final reference database composed of  %d valid references, spent %lf secs\n", refaln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  if (refaln->ntax < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.ref->filename[0]);
 
   /* 2. read each query sequence and align against reference */
   fp = NULL;
@@ -169,19 +159,18 @@ main (int argc, char **argv)
 
   print_score_header ();
   while ((i = kseq_read(seq)) >= 0) 
-    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, cv_seq, cv_name, params.nbest->ival[0], 
+    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, refaln->character, refaln->taxlabel, params.nbest->ival[0], 
                                                  params.nmax->ival[0], &idx, &n_idx, params.ambig_q->dval[0], trim);
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 
-  if (params.out->count) save_sequences (params.out->filename[0], idx, n_idx, cv_seq, cv_name);
+  if (params.out->count) save_sequences (params.out->filename[0], idx, n_idx, refaln->character, refaln->taxlabel);
   fprintf (stderr, "File saved in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
 
   /* everybody is free to feel good */
   kseq_destroy(seq);
   if (idx)   free (idx);
-  del_char_vector (cv_seq);
-  del_char_vector (cv_name);
+  del_alignment (refaln);
   del_arg_parameters (params);
   return EXIT_SUCCESS;
 }
