@@ -10,7 +10,7 @@ bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
 
 
 void
-uvaia_keep_only_valid_sequences (alignment aln, double ambiguity)
+uvaia_keep_only_valid_sequences (alignment aln, double ambiguity, bool check_aligned)
 {
   double result[3];
   int i, *valid = NULL, n_valid=0, maxlength = 0;
@@ -37,7 +37,7 @@ uvaia_keep_only_valid_sequences (alignment aln, double ambiguity)
   } // for each string
   
   /* check if remaining sequences have same length (if aln->is_aligned is true it implies patterns are used, which we don't here) */
-  if (maxlength == -1) {
+  if (check_aligned && maxlength == -1) {
     biomcmc_warning ("Reference sequences in file %s are not aligned.\n", aln->filename);
     del_alignment (aln);
     biomcmc_error ("You can use uvaialign (or mafft, or minimap2) to align them against the same reference.");
@@ -50,21 +50,16 @@ uvaia_keep_only_valid_sequences (alignment aln, double ambiguity)
 }
 
 double
-query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx, double ambiguity, size_t trim)
+query_genome_against_char_vectors (char *name, char *s, unsigned l, char_vector cv_seq, char_vector cv_name, int nbest, int nmax, int **idx, int *n_idx, size_t trim)
 {
   int i;
   int64_t time0[2];
   double *score;
 
   biomcmc_get_time (time0);
-  upper_kseq (s, l); // must be _before_ count_sequence
   score = (double*) biomcmc_malloc ((5 * cv_seq->nstrings) * sizeof (double)); // 3 scores but we need 5 for openMP
 
-  biomcmc_count_sequence_acgt (s, l, score); // score[] used temporarily here
-  if (score[2] > ambiguity) { fprintf (stderr, "Query %s has proportion of N etc. (=%9lf) above threshold (%lf)\n", name, score[2], ambiguity); free (score); return 0.; }
-  if (score[0] < 1. - 1.1 * ambiguity) { fprintf (stderr, "Query %s has proportion of ACGT (=%9lf) below threshold (%lf)\n", name, score[0], 1. - 1.1 * ambiguity); free (score); return 0.; }
-
-  if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size // FIXME: no need to return error; just skip this one
+  if (cv_seq->nchars[0] != (size_t) l) { // all refs have same size
     biomcmc_warning ("this program assumes aligned sequences, and sequence %s has length %u while reference sequences have length %lu", name, l, cv_seq->nchars[0]);
     if (score) free (score);
     return biomcmc_update_elapsed_time (time0); // returns time in seconds

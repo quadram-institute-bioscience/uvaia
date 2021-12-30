@@ -111,11 +111,9 @@ main (int argc, char **argv)
   int i, *idx = NULL, n_idx = 0;
   int64_t time0[2]; 
   double t_secs = 0.;
-  kseq_t *seq;
-  gzFile fp;
   size_t trim;
   //char_vector cv_seq, cv_name;
-  alignment refaln;
+  alignment refaln, query;
 
   biomcmc_get_time (time0); 
   arg_parameters params = get_parameters_from_argv (argc, argv);
@@ -142,25 +140,23 @@ main (int argc, char **argv)
   if (params.trim->ival[0] <= 0) trim = 0; // lower bound is zero (default value)
   else trim = (size_t) params.trim->ival[0];
   if (trim > refaln->nchar / 2.1) trim = refaln->nchar / 2.1; // if we trim more than 1/2 the genome there's nothing left
-  fprintf (stderr, "Finished reading %d reference references in %lf secs; now will exclude low quality sequences\n", refaln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
-  
-  uvaia_keep_only_valid_sequences (refaln, params.ambig_r->dval[0]);
 
+  fprintf (stderr, "Finished reading %d reference references in %lf secs; now will exclude low quality sequences\n", refaln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  uvaia_keep_only_valid_sequences (refaln, params.ambig_r->dval[0], true); // true -> check if seqs are aligned, exiting o.w.
   fprintf (stderr, "Final reference database composed of  %d valid references, spent %lf secs\n", refaln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
   if (refaln->ntax < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.ref->filename[0]);
 
   /* 2. read each query sequence and align against reference */
-  fp = NULL;
-  fp = gzopen((char*) params.fasta->filename[0], "r");
-  if (!fp)  biomcmc_error ("Could not open query file %s.", params.fasta->filename[0]);
-  seq = NULL;
-  seq = kseq_init(fp); 
-  if (!seq)  biomcmc_error ("Query file %s was not recognised as fasta (or zipped fasta).", params.fasta->filename[0]);
+  query = read_fasta_alignment_from_file ((char*)params.fasta->filename[0], 0xf); // 0xf -> neither true or false, but gets only bare alignment info
+  fprintf (stderr, "Finished reading %d query references in %lf secs; now will exclude low quality sequences\n", query->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  uvaia_keep_only_valid_sequences (query, params.ambig_q->dval[0], false); // false -> do not check if seqs are aligned, will be done below w/ reference
+  fprintf (stderr, "Final query database composed of  %d valid references, spent %lf secs\n", query->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
 
   print_score_header ();
-  while ((i = kseq_read(seq)) >= 0) 
-    t_secs += query_genome_against_char_vectors (seq->name.s, seq->seq.s, seq->seq.l, refaln->character, refaln->taxlabel, params.nbest->ival[0], 
-                                                 params.nmax->ival[0], &idx, &n_idx, params.ambig_q->dval[0], trim);
+   
+  for (i = 0; i < query->ntax; i++) 
+    t_secs += query_genome_against_char_vectors (query->taxlabel->string[i], query->character->string[i], query->character->nchars[i], refaln->character, refaln->taxlabel, 
+                                                 params.nbest->ival[0], params.nmax->ival[0], &idx, &n_idx, trim);
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 
@@ -170,9 +166,9 @@ main (int argc, char **argv)
   }
 
   /* everybody is free to feel good */
-  kseq_destroy(seq);
   if (idx)   free (idx);
   del_alignment (refaln);
+  del_alignment (query);
   del_arg_parameters (params);
   return EXIT_SUCCESS;
 }
