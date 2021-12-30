@@ -164,8 +164,10 @@ main (int argc, char **argv)
 
   fprintf (stderr, "finished search in %lf secs (%lf secs within loop)\n", biomcmc_update_elapsed_time (time0), t_secs); fflush(stderr);
 
-  if (params.out->count) save_sequences (params.out->filename[0], idx, n_idx, refaln->character, refaln->taxlabel);
-  fprintf (stderr, "File saved in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  if (params.out->count) {
+    save_sequences (params.out->filename[0], idx, n_idx, refaln->character, refaln->taxlabel);
+    fprintf (stderr, "File saved in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  }
 
   /* everybody is free to feel good */
   kseq_destroy(seq);
