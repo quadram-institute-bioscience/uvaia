@@ -137,7 +137,7 @@ main (int argc, char **argv)
 #endif
 
   /* 1. read reference sequences into char_vectors (ref genome wll be on seq->seq.s and name on seq->name.s) */
-  refaln = read_fasta_alignment_from_file ((char*)params.ref->filename[0], false); // false -> do not compact patterns
+  refaln = read_fasta_alignment_from_file ((char*)params.ref->filename[0], 0xf); // 0xf -> neither true or false, but gets only bare alignment info
 
   if (params.trim->ival[0] <= 0) trim = 0; // lower bound is zero (default value)
   else trim = (size_t) params.trim->ival[0];
