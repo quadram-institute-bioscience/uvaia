@@ -280,4 +280,3 @@ calculate_score_from_cigar (edit_cigar_t* edit_cigar)
   for (i = edit_cigar->begin_offset; i < edit_cigar->end_offset; ++i) if (edit_cigar->operations[i] == 'M') matches++; 
   return (double)(matches)/(double)(edit_cigar->end_offset - edit_cigar->begin_offset);
 }
-
