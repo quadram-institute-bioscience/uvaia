@@ -38,7 +38,7 @@ get_parameters_from_argv (int argc, char **argv)
     .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig_r = arg_dbl0("A","ref_ambiguity",   NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
-    .ref     = arg_file1("r","reference", "[ref.fa(.gz)]", "*aligned* reference sequences"),
+    .ref     = arg_file1("r","reference", "[ref.fa(.gz,.xz)]", "*aligned* reference sequences (raw or compressed with gzip, xz, etc.)"),
     .out     = arg_file0("o","output", "[chosen_refs.fa.xz]", "XZIPPED (LZMA) output reference sequences (default is to not save sequences)"),
     .threads = arg_int0("t","nthreads",NULL, "suggested number of threads (default is to let system decide; I may not honour your suggestion btw)"),
     .fasta   = arg_filen(NULL, NULL, "[query.fa(.gz,.xz)]", 1, 1, "*aligned* sequences to search for neighbour references"),

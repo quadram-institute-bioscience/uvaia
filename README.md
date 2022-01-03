@@ -32,8 +32,10 @@ After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply
 conda install -c bioconda uvaia
 ```
 
+The conda version may not be up-to-date, currently it works with gzip but not LZMA (`.xz`) files.
+
 ### Compiling from source
-If you really want to install it from source, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
+If you want to install it from source (e.g. to use the `.xz` format), you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
 for a **tl;dr**).
 If you forgot to do so, you can update it with
 ```
@@ -64,15 +66,58 @@ from github will complain about uncommited changes. You can run `git stash` (or 
 check the directory [recipe](recipe/) for having a better idea of how conda/docker install it. 
 ## Running
 
-This is still a bit beta so usage may change overnight... in any case, the two main programs are:
+The two main programs are:
 
 * *uvaialign*, to align your query sequences against a reference genome. Output goes to `stdout` (your screen).
 * *uvaia*, to search for _aligned_ queries against an _aligned_ database. Both query and database fasta files 
 can be aligned to same reference sequence with `mafft`, `viralMSA`, or `uvaialign`. Output is a table of reference
 sequences which are closest neighbours to each query. It can also generate a fasta file with these reference sequences. 
 
+### uvaialign
+```
+Align query sequences against a reference
+The complete syntax is:
+
+ uvaialign  [-h|--help] [-v|--version] [-a|--ambiguity=<double>] -r|--reference=<ref.fa|ref.fa.gz> <seqs.fa|seqs.fa.gz>
+
+  -h, --help                       print a longer help and exit
+  -v, --version                    print version and exit
+  -a, --ambiguity=<double>         maximum allowed ambiguity for sequence to be excluded (default=0.5)
+  -r, --reference=<ref.fa|ref.fa.gz> reference sequence
+  <seqs.fa|seqs.fa.gz>             sequences to align
+```
+The mandatory arguments are the reference sequence (Wuhan-Hu-1 `MN908947.3` usually) and your unaligned sequences in
+gzip or uncompressed format (xz format not yet available).
+
+### uvaia
+
+```
+Search query sequences against reference ones to describe closest ones
+This program relies on aligned sequences (queries and references must have same size)
+The complete syntax is:
+
+ uvaia  [-h|--help] [-v|--version] [-n|--nbest=<int>] [-m|--nmax=<int>] [--trim=<int>] [-A|--ref_ambiguity=<double>] [-a|--query_ambiguity=<double>] -r|--reference=[ref.fa(.gz)] [-o|--output=[chosen_refs.fa.xz]] [-t|--nthreads=<int>] [query.fa(.gz,.xz)]
+
+  -h, --help                       print a longer help and exit
+  -v, --version                    print version and exit
+  -n, --nbest=<int>                number of best reference sequences per query to show (default=8)
+  -m, --nmax=<int>                 max number of best reference sequences when several optimal (default=2 x nbest)
+  --trim=<int>                     number of sites to trim from both ends (default=0, suggested for sarscov2=230)
+  -A, --ref_ambiguity=<double>     maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)
+  -a, --query_ambiguity=<double>   maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)
+  -r, --reference=[ref.fa(.xz,.gz,.bz)]    *aligned* reference sequences
+  -o, --output=[chosen_refs.fa.xz] XZIPPED (LZMA) output reference sequences (default is to not save sequences)
+  -t, --nthreads=<int>             suggested number of threads (default is to let system decide; I may not honour your suggestion btw)
+  [query.fa(.gz,.xz)]              *aligned* sequences to search for neighbour references
+```
+
+Both the database of aligned sequences and the set of aligned query sequences can be compressed files (xz, bz, gz). 
+This program uses a lot of memory since it stores the whole (uncompressed) database in memory.
+
+
 ## License 
 SPDX-License-Identifier: GPL-3.0-or-later
+
 
 Copyright (C) 2020-today  [Leonardo de Oliveira Martins](https://github.com/leomrtns)
 
