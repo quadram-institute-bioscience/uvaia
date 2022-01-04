@@ -7,21 +7,31 @@
 
 #include <biomcmc.h>
 
-typedef struct fastaseq_struct fastaseq_t;
-typedef struct readfasta_struct readfasta_t;
+typedef struct fastaseq_struct* fastaseq_t;
+typedef struct readfasta_struct* readfasta_t;
 
 struct fastaseq_struct
 {
   char **nn, *name, *seq;
   int n_nn, score;
   size_t nchars;
-}
+};
 
 struct readfasta_struct
 {
   file_compress_t seqfile;
-  char *line, *line_read, *next_name;
-  size_t linelength;
-  fastaseq_t fs;
-}
+  char *line_read, *next_name;
+  char *name, *seq; /*! \brief sequence and header */
+  size_t linelength, seqlength;
+  bool newseq;
+};
+
+fastaseq_t new_fastaseq (void);
+void del_fastaseq (fastaseq_t fs);
+void update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, int score);
+
+readfasta_t new_readfasta (const char *seqfilename);
+int readfasta_next (readfasta_t rfas);
+void del_readfasta (readfasta_t rfas);
+
 #endif

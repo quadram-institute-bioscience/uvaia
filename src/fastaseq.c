@@ -3,13 +3,15 @@
  */
 
 #include "fastaseq.h"
+
 fastaseq_t
 new_fastaseq (void)
 {
   fastaseq_t fs = (fastaseq_t) biomcmc_malloc (sizeof (struct fastaseq_struct));
   fs->n_nn = fs->score = 0;
   fs->nchars = 0;
-  fs->nn = fs->name = fs->seq = NULL;
+  fs->name = fs->seq = NULL;
+  fs->nn = NULL;
   return fs;
 }
 
@@ -29,60 +31,98 @@ del_fastaseq (fastaseq_t fs)
 }
 
 void
-update_fasta_seq (fastaseq_t to, fastaseq_t from)
+update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, int score)
 {
   // 1. replace sequence info 
   if (to->seq) free (to->seq);
-  to->seq = from->seq;
-  from->seq = NULL;
+  to->seq = *seq;
+  *seq = NULL;
   // 2. update list of neighbours
   if (to->name) {
     to->nn = (char**) biomcmc_realloc ((char**) to->nn, (to->n_nn + 1) * sizeof (char*));
     to->nn[to->n_nn++] = to->name;
   }
   // 3. replace name
-  to->name = from->name;
-  from->name = NULL;
-  // 4. update socre and seq length info
-  to->score = from->score;
-  to->nchars = from->nchars;
-  del_fastaseq (from);
+  to->name = *name;
+  *name = NULL;
+  // 4. update score and seq length info
+  to->score = score;
+  to->nchars = nchars; // we assume checks were done outside this function; we accept new sequence length
 }
 
 readfasta_t
-new_readfasta (char *seqfilename)
+new_readfasta (const char *seqfilename)
 {
   readfasta_t rfas = (readfasta_t) biomcmc_malloc (sizeof (struct readfasta_struct));
-  seqfile = biomcmc_open_compress (seqfilename, "r");
-  rfas->next_name = NULL;
-  rfas->fs = new_fastaseq ();
-  rfas->line = NULL, rfas->line_read = NULL;
-  rfas->linelength = 0;
+  rfas->seqfile = biomcmc_open_compress (seqfilename, "r");
+  rfas->next_name = rfas->name = rfas->seq = NULL;
+  rfas->line_read = NULL;
+  rfas->linelength = rfas->seqlength = 0;
+  rfas->newseq = false;
+  return rfas;
 }
 
-// STOPHERE
 int
 readfasta_next (readfasta_t rfas)
 {
-  char *delim = NULL;
-  /* start reading file */
-  while (biomcmc_getline_compress (&line_read, &linelength, seqfile) != -1) {
-    line = line_read; /* the variable *line_read should point always to the same value (no line++ or alike) */
-    if (nonempty_fasta_line (line)) { /* each line can be either the sequence or its name, on a strict order */
-      /* sequence description (in FASTA jargon); the sequence name */
-      if ((delim = strchr (line, '>'))) char_vector_add_string (taxlabel, ++delim);
-      /* the sequence itself, which may span several lines */
-      else {
+  size_t nchars = 0;
+  char *line = NULL, *delim = NULL;
+  if (!rfas->seqfile) return -1; // we've finished reading the file
+  /* keep reading file */
+  while (biomcmc_getline_compress (&(rfas->line_read), &(rfas->linelength), rfas->seqfile) != -1) {
+    line = rfas->line_read; /* the variable *line_read should point always to the same value (no line++ or alike) */
+    if (nonempty_fasta_line (line)) { 
+      if ((delim = strchr (line, '>'))) { // new sequence; store its name and return previous sequence
+        delim++; // skip symbol
+        rfas->newseq = true; // next iteration will be new sequence (we're finished reading the one in buffer) 
+        if (rfas->next_name) { // not the first sequence; thus we return name and seq
+          if (rfas->name) free (rfas->name);
+          rfas->name = rfas->next_name;
+        }
+        nchars = strlen (delim);
+        rfas->next_name = (char*) biomcmc_malloc ((nchars + 1) * sizeof (char));
+        memcpy (rfas->next_name, delim, nchars);
+        rfas->next_name[nchars] = '\0';
+        if (rfas->seqlength) return (int)(rfas->seqlength); // there is a seq in the buffer
+      }
+      else { // reading the sequence, which may be multi-line
+        if (rfas->newseq) { // previous line was seq name, we are starting new one
+          if (rfas->seq) free (rfas->seq);
+          rfas->seq = NULL;
+          rfas->seqlength = 0;
+        }
         line = remove_space_from_string (line);
         line = uppercase_string (line);
-        char_vector_append_string_big_at_position (character, line, taxlabel->next_avail-1); // counter from taxlabel NOT character
+        nchars = strlen (line);
+        rfas->seq = (char*) biomcmc_realloc ((char*)rfas->seq, (rfas->seqlength + nchars + 1) * sizeof (char));
+        memcpy (rfas->seq + rfas->seqlength, line, nchars); 
+        rfas->seqlength += nchars;
+        rfas->seq[rfas->seqlength] = '\0'; // notice that strlen is seqlength + nchars _plus_one_ (to fit the null char)
+        rfas->newseq = false; // to make sure seq is not deleted 
       }
-    }
+    } // nonempty()
+  } // getline()
+  // reached EOF; first prepare to return -1 on subsequent calls
+  biomcmc_close_compress (rfas->seqfile);
+  rfas->seqfile = NULL;
+  if (rfas->line_read) free (rfas->line_read);
+  rfas->line_read = NULL;
+  // and then return whatever is in buffer (hopefully name and seq)
+  if (rfas->next_name) { // not the first sequence; thus we return name and seq
+    if (rfas->name) free (rfas->name);
+    rfas->name = rfas->next_name;
   }
-  //fclose (seqfile);
-  biomcmc_close_compress (seqfile);
-  if (line_read) free (line_read);
-  char_vector_finalise_big (character);
-  align = new_alignment_from_taxlabel_and_character_vectors (taxlabel, character, seqfilename, compact_patterns);
-  return align;
+  return (int)(rfas->seqlength); // there should be a seq in the buffer
 }
+
+void
+del_readfasta (readfasta_t rfas)
+{
+  if (!rfas) return;
+  if (rfas->seqfile) biomcmc_close_compress (rfas->seqfile);
+  if (rfas->line_read) free (rfas->line_read);
+  if (rfas->seq) free (rfas->seq);
+  if (rfas->next_name) free (rfas->next_name); // rfas->name is always just a pointer; was allocated with next_name
+  free (rfas);
+}
+

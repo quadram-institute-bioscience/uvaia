@@ -131,3 +131,22 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+##  <autotools>
+aclocal.m4
+autom4te.cache/
+compile
+config.guess
+config.log
+config.status
+config.sub
+configure
+depcomp
+missing
+ltmain.sh
+libtool
+install-sh
+Makefile
+src/Makefile
+include/Makefile
+.deps

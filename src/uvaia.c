@@ -4,8 +4,6 @@
 
 #include "utils.h" 
 
-KSEQ_INIT(gzFile, gzread)
-
 typedef struct
 {
   struct arg_lit  *help;

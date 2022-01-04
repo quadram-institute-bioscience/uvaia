@@ -1,5 +1,5 @@
 #format("%s",esyscmd("ls"))
-AC_INIT([uvaia], [1.0.0], [leomrtns@gmail.com],[], [https://github.com/quadram-institute-bioscience/uvaia])
+AC_INIT([uvaia], [2.0.0], [leomrtns@gmail.com],[], [https://github.com/quadram-institute-bioscience/uvaia])
 AC_CONFIG_HEADER([biomcmc-lib/lib/config.h])
 
 AC_CONFIG_AUX_DIR([.])
