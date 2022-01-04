@@ -50,6 +50,40 @@ update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, int sco
   to->nchars = nchars; // we assume checks were done outside this function; we accept new sequence length
 }
 
+cluster_t
+new_cluster (void)
+{
+  cluster_t clust = (cluster_t) biomcmc_malloc (sizeof (struct cluster_struct));
+  clust->fs = NULL;
+  clust->n_fs = 0;
+  return clust;
+}
+
+void
+del_cluster (cluster_t clus)
+{
+  if (!clust) return;
+  int i;
+  for (i = clust->n_fs-1; i >= 0; i--) del_fastaseq (clust->fs[i]);
+  free (clust);
+  return;
+}
+
+void
+add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, int score)
+{
+  int i;
+  if (idx > clust->n_fs) { // new cluster, no similar sequences in cluster set
+    idx = clust->n_fs;
+    clust->fs = (fastaseq_t*) biomcmc_realloc ((fastaseq_t*) clust->fs, (++clust->n_fs) * sizeof (fastaseq_t));
+    clust->fs[idx] = new_fastaseq ();
+    update_fasta_seq (clust->fs[idx], *seq, *name, nchars, score);  // STOPHERE
+  }
+
+}
+
+
+
 readfasta_t
 new_readfasta (const char *seqfilename)
 {

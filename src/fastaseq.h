@@ -8,6 +8,7 @@
 #include <biomcmc.h>
 
 typedef struct fastaseq_struct* fastaseq_t;
+typedef struct cluster_struct* cluster_t;
 typedef struct readfasta_struct* readfasta_t;
 
 struct fastaseq_struct
@@ -15,6 +16,12 @@ struct fastaseq_struct
   char **nn, *name, *seq;
   int n_nn, score;
   size_t nchars;
+};
+
+struct cluster_struct
+{
+  fastaseq_t fs;
+  int n_fs;
 };
 
 struct readfasta_struct
