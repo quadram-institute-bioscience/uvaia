@@ -73,16 +73,73 @@ void
 add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, int score)
 {
   int i;
-  if (idx > clust->n_fs) { // new cluster, no similar sequences in cluster set
+  if (idx >= clust->n_fs) { // new cluster, no similar sequences in cluster set
     idx = clust->n_fs;
     clust->fs = (fastaseq_t*) biomcmc_realloc ((fastaseq_t*) clust->fs, (++clust->n_fs) * sizeof (fastaseq_t));
     clust->fs[idx] = new_fastaseq ();
-    update_fasta_seq (clust->fs[idx], *seq, *name, nchars, score);  // STOPHERE
+    update_fasta_seq (clust->fs[idx], seq, name, nchars, score);
+    return;
   }
-
+  if (score >= clust->fs[idx]->score) { // existing cluster, this sequence is new medoid
+    update_fasta_seq (clust->fs[idx], seq, name, nchars, score);
+    return;
+  }
+  // existing cluster and current sequence not new medoid
+  clust->fs[idx]->nn = (char**) biomcmc_realloc ((char**) clust->fs[idx]->nn, (clust->fs[idx]->n_nn + 1) * sizeof (char*));
+  clust->fs[idx]->nn[clust->fs[idx]->n_nn++] = *name;
+  *name = NULL;
+  if (*seq) free (*seq);
+  *seq = NULL;
+  return;
 }
 
+void
+save_cluster_to_xz_file (cluster_t clust, const char* filename)
+{
+#ifndef HAVE_LZMA 
+  fprintf (stderr, "LZMA library missing; reverting to gzip or uncompressed\n");
+  save_cluster_to_gz_file (clust, filename);
+  return;
+#else
+  int i;
+  size_t nchar;
+  xz_file_t *xz = NULL;
+  xz = biomcmc_xz_open (filename, "w", 4096);
+  if (!xz) {
+    fprintf (stderr, "Problem opening file %s for writing with XZ compression; reverting to gzip or uncompressed\n", filename);
+    save_cluster_to_gz_file (clust, filename);
+    return;
+  }
+  for (i = 0; i < clust->n_fs; i++) {
+    if (biomcmc_xz_write (xz, ">", 1) != 1) fprintf (stderr, "problem filling xz buffer [1];\n");
+    nchar = strlen(clust->fs[i]->name);
+    if (biomcmc_xz_write (xz, clust->fs[i]->name, nchar) != nchar) fprintf (stderr, "problem filling xz buffer [2];\n");
+    if (biomcmc_xz_write (xz, "\n", 1) != 1) fprintf (stderr, "problem filling xz buffer [3];\n");
+    nchar = clust->fs[i]->nchars;
+    if (biomcmc_xz_write (xz, clust->fs[i]->seq, nchar) != nchar) fprintf (stderr, "problem filling xz buffer [4];\n");
+    if (biomcmc_xz_write (xz, "\n", 1) != 1) fprintf (stderr, "problem filling xz buffer [5];\n");
+  }
+  biomcmc_xz_close (xz);
+#endif
+  return;
+}
 
+void
+save_cluster_to_gz_file (cluster_t clust, const char* filename)
+{
+#ifdef HAVE_ZLIB
+  gzFile stream;
+  stream = biomcmc_gzopen (filename, "w");
+  for (i = 0; i < clust->n_fs; i++) gzprintf (stream, ">%s\n%s\n", clust->fs[i]->name, clust->fs[i]->seq);
+  gzclose (stream);
+#else
+  FILE *stream;
+  stream = biomcmc_fopen (filename, "w");
+  for (i = 0; i < clust->n_fs; i++) fprintf (stream, ">%s\n%s\n", clust->fs[i]->name, clust->fs[i]->seq);
+  fclose (stream);
+#endif
+  return;
+}
 
 readfasta_t
 new_readfasta (const char *seqfilename)
