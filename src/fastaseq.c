@@ -1,14 +1,33 @@
 /* SPDX-License-Identifier: GPL-3.0-or-later
  * Copyright (C) 2019-today  Leonardo de Oliveira Martins [ leomrtns at gmail.com;  http://www.leomartins.org ]
+ *
+ * The approach used here for pointers is dangerous since the functions modify the pointer status of strings (the proper
+ * usage involves reference_counters and delete()); i.e. one function allocs memory while another frees it as a
+ * secondary effect. Strings are pointed to NULL to make sure they cannot modify the string anymore. 
  */
 
 #include "fastaseq.h"
+
+int
+compare_fastaseq (const void *a, const void *b)
+{  
+  int res_i = (*(fastaseq_t*)b)->n_nn - (*(fastaseq_t*)a)->n_nn; // decreasing
+  if (res_i) return res_i;
+  double res_d;
+  res_d = (*(fastaseq_t*)b)->score[1] - (*(fastaseq_t*)a)->score[1]; // increasing uncertainty 
+  if (res_d < -1e-6) return -1;
+  if (res_d > 1e-6) return 1;
+  res_d = (*(fastaseq_t*)b)->score[1] - (*(fastaseq_t*)a)->score[1]; // decreasing distance from reference
+  if (res_d < 0.) return -1;
+  return 1;
+}
 
 fastaseq_t
 new_fastaseq (void)
 {
   fastaseq_t fs = (fastaseq_t) biomcmc_malloc (sizeof (struct fastaseq_struct));
-  fs->n_nn = fs->score = 0;
+  fs->n_nn = 0;
+  fs->score[0] = fs->score[1] = 0.;
   fs->nchars = 0;
   fs->name = fs->seq = NULL;
   fs->nn = NULL;
@@ -31,7 +50,7 @@ del_fastaseq (fastaseq_t fs)
 }
 
 void
-update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, int score)
+update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, double *score)
 {
   // 1. replace sequence info 
   if (to->seq) free (to->seq);
@@ -46,31 +65,78 @@ update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, int sco
   to->name = *name;
   *name = NULL;
   // 4. update score and seq length info
-  to->score = score;
+  to->score[0] = score[0];
+  to->score[1] = score[1];
   to->nchars = nchars; // we assume checks were done outside this function; we accept new sequence length
 }
 
 cluster_t
-new_cluster (void)
+new_cluster (char **seq, size_t nchars, int mindist, size_t trim)
 {
   cluster_t clust = (cluster_t) biomcmc_malloc (sizeof (struct cluster_struct));
   clust->fs = NULL;
   clust->n_fs = 0;
+  clust->mindist = (double) mindist;
+  clust->trim = trim;
+  clust->reference = *seq;
+  *seq = NULL;
+  clust->nchars = nchars;
+
   return clust;
 }
 
 void
-del_cluster (cluster_t clus)
+del_cluster (cluster_t clust)
 {
   if (!clust) return;
   int i;
   for (i = clust->n_fs-1; i >= 0; i--) del_fastaseq (clust->fs[i]);
+  if (clust->reference) free (clust->reference);
   free (clust);
   return;
 }
 
 void
-add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, int score)
+check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t nchars)
+{
+  int i,j;
+  double result[5], score[2]; // score = {proportion non-N, text dist to reference}
+
+  if (nchars != clust->nchars) 
+    biomcmc_error ("%s cannot work with unaligned sequences; sequence %s has %lu sites while reference has %d.", PACKAGE_STRING, *name, nchars, clust->nchars);
+
+  upper_kseq (*seq, nchars); // must be _before_ count_sequence
+  biomcmc_count_sequence_acgt (*seq, nchars, result); 
+  score[0] = 1. - result[2];
+  for (i = 0; i < clust->n_fs; i++) {
+    biomcmc_pairwise_score_matches (*seq + clust->trim, clust->fs[i]->seq + clust->trim, (int) nchars - 2 * clust->trim, result);
+    if ((result[4] - result[2]) <= clust->mindist) { // result[2] = weighted compatible i.e. W<->W is 25% compatible ; result[4] = valid sites
+      if ((result[1] == result[4]) && (score[0] > clust->fs[i]->score[0])) { // seq is more resolved than existing medoid
+        if (clust->reference) {
+          biomcmc_pairwise_score_matches (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, result);
+          score[1] = result[1]; // result[1] = text match (i.e. B<->Q)
+        }
+        else score[1] = score[0]; // if reference is absent, then medoid will have lowest number of Ns
+      }
+      else { score[1] = 0.; } // seq cannot be new medoid 
+
+      add_seq_to_cluster (clust, i, seq, name, nchars, score);
+      return;
+    }
+  }
+  // not similar to any existing cluster
+  if (clust->reference) {
+    biomcmc_pairwise_score_matches (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, result);
+    score[1] = result[1]; // result[1] = text match (i.e. B<->Q), and medoid will be farthest from reference
+  }
+  else score[1] = score[0]; // if reference is absent, then medoid will have lowest number of Ns
+
+  add_seq_to_cluster (clust, i, seq, name, nchars, score);
+  return;
+}
+
+void
+add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, double *score)
 {
   int i;
   if (idx >= clust->n_fs) { // new cluster, no similar sequences in cluster set
@@ -80,7 +146,7 @@ add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nc
     update_fasta_seq (clust->fs[idx], seq, name, nchars, score);
     return;
   }
-  if (score >= clust->fs[idx]->score) { // existing cluster, this sequence is new medoid
+  if (score[1] > clust->fs[idx]->score[1]) { // existing cluster, this sequence is new medoid since furthest from reference
     update_fasta_seq (clust->fs[idx], seq, name, nchars, score);
     return;
   }
@@ -102,7 +168,7 @@ save_cluster_to_xz_file (cluster_t clust, const char* filename)
   return;
 #else
   int i;
-  size_t nchar;
+  size_t nchars;
   xz_file_t *xz = NULL;
   xz = biomcmc_xz_open (filename, "w", 4096);
   if (!xz) {
@@ -112,11 +178,11 @@ save_cluster_to_xz_file (cluster_t clust, const char* filename)
   }
   for (i = 0; i < clust->n_fs; i++) {
     if (biomcmc_xz_write (xz, ">", 1) != 1) fprintf (stderr, "problem filling xz buffer [1];\n");
-    nchar = strlen(clust->fs[i]->name);
-    if (biomcmc_xz_write (xz, clust->fs[i]->name, nchar) != nchar) fprintf (stderr, "problem filling xz buffer [2];\n");
+    nchars = strlen(clust->fs[i]->name);
+    if (biomcmc_xz_write (xz, clust->fs[i]->name, nchars) != nchars) fprintf (stderr, "problem filling xz buffer [2];\n");
     if (biomcmc_xz_write (xz, "\n", 1) != 1) fprintf (stderr, "problem filling xz buffer [3];\n");
-    nchar = clust->fs[i]->nchars;
-    if (biomcmc_xz_write (xz, clust->fs[i]->seq, nchar) != nchar) fprintf (stderr, "problem filling xz buffer [4];\n");
+    nchars = clust->fs[i]->nchars;
+    if (biomcmc_xz_write (xz, clust->fs[i]->seq, nchars) != nchars) fprintf (stderr, "problem filling xz buffer [4];\n");
     if (biomcmc_xz_write (xz, "\n", 1) != 1) fprintf (stderr, "problem filling xz buffer [5];\n");
   }
   biomcmc_xz_close (xz);
@@ -127,6 +193,7 @@ save_cluster_to_xz_file (cluster_t clust, const char* filename)
 void
 save_cluster_to_gz_file (cluster_t clust, const char* filename)
 {
+  int i;
 #ifdef HAVE_ZLIB
   gzFile stream;
   stream = biomcmc_gzopen (filename, "w");
@@ -136,6 +203,65 @@ save_cluster_to_gz_file (cluster_t clust, const char* filename)
   FILE *stream;
   stream = biomcmc_fopen (filename, "w");
   for (i = 0; i < clust->n_fs; i++) fprintf (stream, ">%s\n%s\n", clust->fs[i]->name, clust->fs[i]->seq);
+  fclose (stream);
+#endif
+  return;
+}
+
+void
+save_neighbours_to_xz_file (cluster_t clust, const char* filename)
+{
+#ifndef HAVE_LZMA 
+  fprintf (stderr, "LZMA library missing; reverting to gzip or uncompressed\n");
+  save_neigbours_to_gz_file (clust, filename);
+  return;
+#else
+  int i, j, errors = 0;
+  size_t nchars;
+  xz_file_t *xz = NULL;
+  xz = biomcmc_xz_open (filename, "w", 4096);
+  if (!xz) {
+    fprintf (stderr, "Problem opening neighbours file %s for writing with XZ compression; reverting to gzip or uncompressed\n", filename);
+    save_neighbours_to_gz_file (clust, filename);
+    return;
+  }
+  for (i = 0; i < clust->n_fs; i++) {
+    nchars = strlen(clust->fs[i]->name);
+    if (biomcmc_xz_write (xz, clust->fs[i]->name, nchars) != nchars) errors++; 
+    for (j = 0; j < clust->fs[i]->n_nn; j++) {
+      if (biomcmc_xz_write (xz, ",", 1) != 1) errors++; 
+      nchars = strlen(clust->fs[i]->nn[j]);
+      if (biomcmc_xz_write (xz, clust->fs[i]->nn[j], nchars) != nchars) errors++;
+    }
+    if (biomcmc_xz_write (xz, "\n", 1) != 1) errors++; 
+  }
+  if (errors) fprintf (stderr,"File %s may not be correctly compressed, %d error%s occurred.\n", filename, errors, ((errors > 1)? "s":""));
+  biomcmc_xz_close (xz);
+#endif
+  return;
+}
+
+void
+save_neighbours_to_gz_file (cluster_t clust, const char* filename)
+{
+  int i, j;
+#ifdef HAVE_ZLIB
+  gzFile stream;
+  stream = biomcmc_gzopen (filename, "w");
+  for (i = 0; i < clust->n_fs; i++) {
+    gzprintf (stream, "%s", clust->fs[i]->name);
+    for (j = 0; j < clust->fs[i]->n_nn; j++) gzprintf (stream, ",%s", clust->fs[i]->nn[j]);
+    gzprintf (stream, "\n");
+  }
+  gzclose (stream);
+#else
+  FILE *stream;
+  stream = biomcmc_fopen (filename, "w");
+  for (i = 0; i < clust->n_fs; i++) {
+    fprintf (stream, "%s", clust->fs[i]->name);
+    for (j = 0; j < clust->fs[i]->n_nn; j++) fprintf (stream, ",%s", clust->fs[i]->nn[j]);
+    fprintf (stream, "\n");
+  }
   fclose (stream);
 #endif
   return;
@@ -202,6 +328,7 @@ readfasta_next (readfasta_t rfas)
   if (rfas->next_name) { // not the first sequence; thus we return name and seq
     if (rfas->name) free (rfas->name);
     rfas->name = rfas->next_name;
+    rfas->next_name = NULL; // otherwise will be pointing to the last name
   }
   return (int)(rfas->seqlength); // there should be a seq in the buffer
 }
@@ -214,6 +341,7 @@ del_readfasta (readfasta_t rfas)
   if (rfas->line_read) free (rfas->line_read);
   if (rfas->seq) free (rfas->seq);
   if (rfas->next_name) free (rfas->next_name); // rfas->name is always just a pointer; was allocated with next_name
+  if (rfas->name) free (rfas->name);
   free (rfas);
 }
 

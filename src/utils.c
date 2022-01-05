@@ -4,10 +4,8 @@
 
 #include "utils.h"
 
-void upper_kseq (char *s, unsigned l);
 void describe_scores (char *query_name, double *score, char_vector refnames, int nbest, int nmax, int **idx, int *n_idx);
 bool sequence_n_below_threshold (char *seq, int seq_length, double threshold);
-
 
 void
 uvaia_keep_only_valid_sequences (alignment aln, double ambiguity, bool check_aligned)
