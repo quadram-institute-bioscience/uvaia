@@ -86,7 +86,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, count = 0, n_threads = 1, print_interval = 500;
+  int j, c, count = 0, n_threads = 1, print_interval = 10000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   size_t trim = 0, outlength = 0, *nchars_vec;
