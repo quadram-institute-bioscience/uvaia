@@ -73,6 +73,8 @@ The two main programs are:
 can be aligned to same reference sequence with `mafft`, `viralMSA`, or `uvaialign`. Output is a table of reference
 sequences which are closest neighbours to each query. It can also generate a fasta file with these reference sequences. 
 
+There is also an experimental program *uvaiaclust* which tries to remove redundant sequences from an alignment. 
+
 ### uvaialign
 ```
 Align query sequences against a reference
@@ -114,6 +116,20 @@ The complete syntax is:
 Both the database of aligned sequences and the set of aligned query sequences can be compressed files (xz, bz, gz). 
 This program uses a lot of memory since it stores the whole (uncompressed) database in memory.
 
+### uvaiaclust (experimental)
+Removal of redundant sequences based on a single-distance canopy clustering: each new sequence will be merged into the
+first cluster s.t. its distance is smaller than the threshold. Each cluster is represented by its most resolved sequence
+(fewer Ns). An aligment with the final medoids is returned, with a list of sequence names belonging to each cluster. 
+
+It is not a proper clustering since identical sequences may belong to distinct medoids. 
+Furthermore the pairwise distances within the cluster may exceed the threshold (since medoids are updated as new
+elements are added). 
+
+If a reference sequence is provided, it is used when updating the medoids, which should be the most resolved and
+furthest from the reference. 
+This is to penalise assemblies where a low resolution is masqueraded by imputing the reference base.
+
+Currently this program is a bit slow (10k sequences in one hour?).
 
 ## License 
 SPDX-License-Identifier: GPL-3.0-or-later
