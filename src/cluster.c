@@ -86,12 +86,20 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int i, j, count = 0;
+  int j, c, count = 0, n_threads = 1, print_interval = 500;
+  bool end_of_file = false;
   int64_t time0[2], time1[2];
-  size_t trim = 0, outlength = 0;
-  char *outfilename;
+  size_t trim = 0, outlength = 0, *nchars_vec;
+  char *outfilename = NULL, *refseq = NULL, **seq_vec, **name_vec;
   readfasta_t rfas;
-  cluster_t clust;
+  cluster_t *clust;
+
+  #ifdef _OPENMP
+  n_threads = omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
+#else
+  n_threads = 1; // compiled without openMP support (e.g. --disable-openmp)
+  biomcmc_warning ("Program compiled without multithread support");
+#endif
 
   biomcmc_get_time (time0); 
   biomcmc_get_time (time1); 
@@ -99,31 +107,63 @@ main (int argc, char **argv)
   if (params.dist->ival[0] < 0) params.dist->ival[0] = 0; 
 
   /* 1. read reference sequence (if missing, use database just to get length) */
-  if (params.ref->count) rfas = new_readfasta (params.ref->filename[0]);
-  else rfas = new_readfasta (params.fasta->filename[0]);
+  if (params.ref->count) {
+    rfas = new_readfasta (params.ref->filename[0]);
+    refseq = rfas->seq;
+  }
+  else {
+    rfas = new_readfasta (params.fasta->filename[0]);
+    refseq = NULL;
+  }
   readfasta_next (rfas);
   
   if (params.trim->ival[0] > 0) trim = (size_t) params.trim->ival[0];
   if (trim > rfas->seqlength / 2.1) trim = rfas->seqlength / 2.1; // if we trim more than 1/2 the genome there's nothing left
-  if (params.dist->ival[0] > rfas->seqlength / 10) params.dist->ival[0] = rfas->seqlength / 10;
-  clust = new_cluster (&(rfas->seq), rfas->seqlength, params.dist->ival[0], trim);
-  
-  del_readfasta (rfas);
+  if (params.dist->ival[0] > (int)(rfas->seqlength) / 10) params.dist->ival[0] = rfas->seqlength / 10;
 
-  if (!params.ref->count) { // do not use sequence information 
-    if (clust->reference) free (clust->reference);
-    clust->reference = NULL;
+  /* 1.1 one cluster per thread, with char pointers etc*/
+  clust = (cluster_t*) biomcmc_malloc (n_threads * sizeof (cluster_t));
+  for (c = 0; c < n_threads; c++) clust[c] = new_cluster (refseq, rfas->seqlength, params.dist->ival[0], trim);
+  seq_vec    = (char**) biomcmc_malloc (n_threads *sizeof (char*)); // only pointer
+  name_vec   = (char**) biomcmc_malloc (n_threads *sizeof (char*)); // only pointer
+  nchars_vec = (size_t*) biomcmc_malloc (n_threads *sizeof (size_t)); // actual number
+  for (c = 0; c < n_threads; c++) { 
+    seq_vec[c] = name_vec[c] = NULL; 
+    nchars_vec[c] = 0;
   }
+
+ 
+  del_readfasta (rfas);
   
   /* 2. read alignment files (can be several) */
   for (j = 0; j < params.fasta->count; j++) {
     rfas = new_readfasta (params.fasta->filename[j]);
+    end_of_file = false;
 
-    while ((i = readfasta_next (rfas)) >= 0) { // one query per iteration
-      check_seq_against_cluster (clust, &(rfas->seq), &(rfas->name), rfas->seqlength);
-      if (!(++count % 1000)) 
-        fprintf (stderr, "%9d sequences into %9d clusters, spent %lf secs\n", count, clust->n_fs, biomcmc_update_elapsed_time (time1)); fflush(stderr);
-    }
+    while (!end_of_file) {
+#pragma omp single
+      for (c = 0; c < n_threads; c++) { // reads n_threads sequences
+        if (readfasta_next (rfas) >= 0) {
+          seq_vec[c] = rfas->seq; rfas->seq = NULL;
+          name_vec[c] = rfas->name; rfas->name = NULL;
+          nchars_vec[c] = rfas->seqlength;
+        }
+        else {
+          seq_vec[c] = name_vec[c] = NULL;
+          end_of_file = true;
+        }
+      } // single thread for() loop
+
+#pragma omp parallel for shared(c, count, clust, seq_vec, name_vec, nchars_vec, time1)
+      for (c = 0; c < n_threads; c++) if (seq_vec[c]) {
+        check_seq_against_cluster (clust[c], &(seq_vec[c]), &(name_vec[c]), nchars_vec[c]);
+        if (!(++count % print_interval)) {
+          fprintf (stderr, "Pool %3d has %d clusters; %d sequences analysed in total; last %d sequences took %4.4lf secs\n", 
+                   c, clust[c]->n_fs, count, print_interval, biomcmc_update_elapsed_time (time1)); 
+          fflush(stderr);
+        }
+      }
+    } // while not end of file
 
     del_readfasta (rfas);
     fprintf (stderr, "Finished reading file %s in %lf secs\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0)); fflush(stderr);
@@ -142,19 +182,24 @@ main (int argc, char **argv)
     outfilename[outlength] = '\0';
   }
  
-  qsort (clust->fs, clust->n_fs, sizeof (fastaseq_t), compare_fastaseq);
+  for (c = 0; c < n_threads; c++) qsort (clust[c]->fs, clust[c]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
 
+  // FIXME this assumes one cluster struct
   strcpy (outfilename + outlength, ".aln.xz");
-  save_cluster_to_xz_file (clust, outfilename);
+  save_cluster_to_xz_file (clust[0], outfilename);
 
   strcpy (outfilename + outlength, ".csv.xz");
-  save_neighbours_to_xz_file (clust, outfilename);
+  save_neighbours_to_xz_file (clust[0], outfilename);
     
   fprintf (stderr, "Finished sorting clusters and saving files in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
 
   /* everybody is free to feel good */
   del_arg_parameters (params);
-  del_cluster (clust);
+  for (c = 0; c < n_threads; c++) del_cluster (clust[c]); 
+  if (clust) free (clust);
+  if (seq_vec) free (seq_vec);
+  if (name_vec) free (name_vec);
+  if (nchars_vec) free (nchars_vec);
   if (outfilename) free (outfilename);
   return EXIT_SUCCESS;
 }

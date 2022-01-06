@@ -71,15 +71,19 @@ update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, double 
 }
 
 cluster_t
-new_cluster (char **seq, size_t nchars, int mindist, size_t trim)
+new_cluster (char *seq, size_t nchars, int mindist, size_t trim)
 {
   cluster_t clust = (cluster_t) biomcmc_malloc (sizeof (struct cluster_struct));
   clust->fs = NULL;
   clust->n_fs = 0;
   clust->mindist = (double) mindist;
   clust->trim = trim;
-  clust->reference = *seq;
-  *seq = NULL;
+  if (seq) {
+    clust->reference = (char*) biomcmc_malloc ((nchars+1) * sizeof (char));
+    memcpy (clust->reference, seq, nchars);
+    clust->reference[nchars] = '\0';
+  }
+  else clust->reference = NULL;
   clust->nchars = nchars;
 
   return clust;
@@ -99,7 +103,7 @@ del_cluster (cluster_t clust)
 void
 check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t nchars)
 {
-  int i,j;
+  int i;
   double result[5], score[2]; // score = {proportion non-N, text dist to reference}
 
   if (nchars != clust->nchars) 
@@ -138,7 +142,6 @@ check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t ncha
 void
 add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, double *score)
 {
-  int i;
   if (idx >= clust->n_fs) { // new cluster, no similar sequences in cluster set
     idx = clust->n_fs;
     clust->fs = (fastaseq_t*) biomcmc_realloc ((fastaseq_t*) clust->fs, (++clust->n_fs) * sizeof (fastaseq_t));

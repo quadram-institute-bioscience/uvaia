@@ -43,7 +43,7 @@ fastaseq_t new_fastaseq (void);
 void del_fastaseq (fastaseq_t fs);
 void update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, double *score);
 
-cluster_t new_cluster (char **seq, size_t nchars, int mindist, size_t trim);
+cluster_t new_cluster (char *seq, size_t nchars, int mindist, size_t trim);
 void del_cluster (cluster_t clus);
 void check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t nchars);
 void add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, double *score);
