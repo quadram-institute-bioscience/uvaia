@@ -48,10 +48,10 @@ void del_cluster (cluster_t clus);
 void check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t nchars);
 void add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, double *score);
 
-void save_cluster_to_xz_file (cluster_t clust, const char* filename);
-void save_cluster_to_gz_file (cluster_t clust, const char* filename);
-void save_neighbours_to_xz_file (cluster_t clust, const char* filename);
-void save_neighbours_to_gz_file (cluster_t clust, const char* filename);
+void save_cluster_to_xz_file (cluster_t *clust, int n_clust, const char* filename);
+void save_cluster_to_gz_file (cluster_t *clust, int n_clust, const char* filename);
+void save_neighbours_to_xz_file (cluster_t *clust, int n_clust, const char* filename);
+void save_neighbours_to_gz_file (cluster_t *clust, int n_clust, const char* filename);
 
 readfasta_t new_readfasta (const char *seqfilename);
 int readfasta_next (readfasta_t rfas);

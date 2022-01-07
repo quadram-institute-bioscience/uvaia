@@ -163,81 +163,84 @@ add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nc
 }
 
 void
-save_cluster_to_xz_file (cluster_t clust, const char* filename)
+save_cluster_to_xz_file (cluster_t *clust, int n_clust, const char* filename)
 {
 #ifndef HAVE_LZMA 
   fprintf (stderr, "LZMA library missing; reverting to gzip or uncompressed\n");
-  save_cluster_to_gz_file (clust, filename);
+  save_cluster_to_gz_file (clust, n_clust, filename);
   return;
 #else
-  int i;
+  int i, c, errors = 0;
   size_t nchars;
   xz_file_t *xz = NULL;
   xz = biomcmc_xz_open (filename, "w", 4096);
   if (!xz) {
     fprintf (stderr, "Problem opening file %s for writing with XZ compression; reverting to gzip or uncompressed\n", filename);
-    save_cluster_to_gz_file (clust, filename);
+    save_cluster_to_gz_file (clust, n_clust, filename);
     return;
   }
-  for (i = 0; i < clust->n_fs; i++) {
-    if (biomcmc_xz_write (xz, ">", 1) != 1) fprintf (stderr, "problem filling xz buffer [1];\n");
-    nchars = strlen(clust->fs[i]->name);
-    if (biomcmc_xz_write (xz, clust->fs[i]->name, nchars) != nchars) fprintf (stderr, "problem filling xz buffer [2];\n");
-    if (biomcmc_xz_write (xz, "\n", 1) != 1) fprintf (stderr, "problem filling xz buffer [3];\n");
-    nchars = clust->fs[i]->nchars;
-    if (biomcmc_xz_write (xz, clust->fs[i]->seq, nchars) != nchars) fprintf (stderr, "problem filling xz buffer [4];\n");
-    if (biomcmc_xz_write (xz, "\n", 1) != 1) fprintf (stderr, "problem filling xz buffer [5];\n");
+  for (c = 0; c < n_clust; c++) for (i = 0; i < clust[c]->n_fs; i++) {
+    if (biomcmc_xz_write (xz, ">", 1) != 1) errors++; 
+    nchars = strlen(clust[c]->fs[i]->name);
+    if (biomcmc_xz_write (xz, clust[c]->fs[i]->name, nchars) != nchars) errors++;
+    if (biomcmc_xz_write (xz, "\n", 1) != 1) errors++;
+    nchars = clust[c]->fs[i]->nchars;
+    if (biomcmc_xz_write (xz, clust[c]->fs[i]->seq, nchars) != nchars) errors++;
+    if (biomcmc_xz_write (xz, "\n", 1) != 1) errors++;
   }
   biomcmc_xz_close (xz);
+  if (errors) fprintf (stderr,"File %s may not be correctly compressed, %d error%s occurred.\n", filename, errors, ((errors > 1)? "s":""));
 #endif
   return;
 }
 
 void
-save_cluster_to_gz_file (cluster_t clust, const char* filename)
+save_cluster_to_gz_file (cluster_t *clust, int n_clust, const char* filename)
 {
-  int i;
+  int i, c;
 #ifdef HAVE_ZLIB
   gzFile stream;
   stream = biomcmc_gzopen (filename, "w");
-  for (i = 0; i < clust->n_fs; i++) gzprintf (stream, ">%s\n%s\n", clust->fs[i]->name, clust->fs[i]->seq);
+  for (c = 0; c < n_clust; c++) for (i = 0; i < clust[c]->n_fs; i++) gzprintf (stream, ">%s\n%s\n", clust[c]->fs[i]->name, clust[c]->fs[i]->seq);
   gzclose (stream);
 #else
   FILE *stream;
   stream = biomcmc_fopen (filename, "w");
-  for (i = 0; i < clust->n_fs; i++) fprintf (stream, ">%s\n%s\n", clust->fs[i]->name, clust->fs[i]->seq);
+  for (c = 0; c < n_clust; c++) for (i = 0; i < clust[c]->n_fs; i++) fprintf (stream, ">%s\n%s\n", clust[c]->fs[i]->name, clust[c]->fs[i]->seq);
   fclose (stream);
 #endif
   return;
 }
 
 void
-save_neighbours_to_xz_file (cluster_t clust, const char* filename)
+save_neighbours_to_xz_file (cluster_t *clust, int n_clust, const char* filename)
 {
 #ifndef HAVE_LZMA 
   fprintf (stderr, "LZMA library missing; reverting to gzip or uncompressed\n");
-  save_neigbours_to_gz_file (clust, filename);
+  save_neigbours_to_gz_file (clust, n_clust, filename);
   return;
 #else
-  int i, j, errors = 0;
+  int i, j, c, errors = 0;
   size_t nchars;
   xz_file_t *xz = NULL;
   xz = biomcmc_xz_open (filename, "w", 4096);
   if (!xz) {
     fprintf (stderr, "Problem opening neighbours file %s for writing with XZ compression; reverting to gzip or uncompressed\n", filename);
-    save_neighbours_to_gz_file (clust, filename);
+    save_neighbours_to_gz_file (clust, n_clust, filename);
     return;
   }
-  for (i = 0; i < clust->n_fs; i++) {
-    nchars = strlen(clust->fs[i]->name);
-    if (biomcmc_xz_write (xz, clust->fs[i]->name, nchars) != nchars) errors++; 
-    for (j = 0; j < clust->fs[i]->n_nn; j++) {
-      if (biomcmc_xz_write (xz, ",", 1) != 1) errors++; 
-      nchars = strlen(clust->fs[i]->nn[j]);
-      if (biomcmc_xz_write (xz, clust->fs[i]->nn[j], nchars) != nchars) errors++;
+  for (c = 0; c < n_clust; c++) {
+    for (i = 0; i < clust[c]->n_fs; i++) {
+      nchars = strlen(clust[c]->fs[i]->name);
+      if (biomcmc_xz_write (xz, clust[c]->fs[i]->name, nchars) != nchars) errors++; 
+      for (j = 0; j < clust[c]->fs[i]->n_nn; j++) {
+        if (biomcmc_xz_write (xz, ",", 1) != 1) errors++; 
+        nchars = strlen(clust[c]->fs[i]->nn[j]);
+        if (biomcmc_xz_write (xz, clust[c]->fs[i]->nn[j], nchars) != nchars) errors++;
+      }
+      if (biomcmc_xz_write (xz, "\n", 1) != 1) errors++; 
     }
-    if (biomcmc_xz_write (xz, "\n", 1) != 1) errors++; 
-  }
+  } // for cluster
   if (errors) fprintf (stderr,"File %s may not be correctly compressed, %d error%s occurred.\n", filename, errors, ((errors > 1)? "s":""));
   biomcmc_xz_close (xz);
 #endif
@@ -245,25 +248,29 @@ save_neighbours_to_xz_file (cluster_t clust, const char* filename)
 }
 
 void
-save_neighbours_to_gz_file (cluster_t clust, const char* filename)
+save_neighbours_to_gz_file (cluster_t *clust, int n_clust, const char* filename)
 {
-  int i, j;
+  int i, j, c;
 #ifdef HAVE_ZLIB
   gzFile stream;
   stream = biomcmc_gzopen (filename, "w");
-  for (i = 0; i < clust->n_fs; i++) {
-    gzprintf (stream, "%s", clust->fs[i]->name);
-    for (j = 0; j < clust->fs[i]->n_nn; j++) gzprintf (stream, ",%s", clust->fs[i]->nn[j]);
-    gzprintf (stream, "\n");
+  for (c = 0; c < n_clust; c++) {
+    for (i = 0; i < clust[c]->n_fs; i++) {
+      gzprintf (stream, "%s", clust[c]->fs[i]->name);
+      for (j = 0; j < clust[c]->fs[i]->n_nn; j++) gzprintf (stream, ",%s", clust[c]->fs[i]->nn[j]);
+      gzprintf (stream, "\n");
+    }
   }
   gzclose (stream);
 #else
   FILE *stream;
   stream = biomcmc_fopen (filename, "w");
-  for (i = 0; i < clust->n_fs; i++) {
-    fprintf (stream, "%s", clust->fs[i]->name);
-    for (j = 0; j < clust->fs[i]->n_nn; j++) fprintf (stream, ",%s", clust->fs[i]->nn[j]);
-    fprintf (stream, "\n");
+  for (c = 0; c < n_clust; c++) {
+    for (i = 0; i < clust[c]->n_fs; i++) {
+      fprintf (stream, "%s", clust[c]->fs[i]->name);
+      for (j = 0; j < clust[c]->fs[i]->n_nn; j++) fprintf (stream, ",%s", clust[c]->fs[i]->nn[j]);
+      fprintf (stream, "\n");
+    }
   }
   fclose (stream);
 #endif

@@ -86,7 +86,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, count = 0, n_threads = 1, print_interval = 10000;
+  int j, c, count = 0, n_clust = 1, print_interval = 500, save_interval = 2000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   size_t trim = 0, outlength = 0, *nchars_vec;
@@ -95,9 +95,9 @@ main (int argc, char **argv)
   cluster_t *clust;
 
   #ifdef _OPENMP
-  n_threads = omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
+  n_clust = 2 * omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
 #else
-  n_threads = 1; // compiled without openMP support (e.g. --disable-openmp)
+  n_clust = 1; // compiled without openMP support (e.g. --disable-openmp)
   biomcmc_warning ("Program compiled without multithread support");
 #endif
 
@@ -105,6 +105,20 @@ main (int argc, char **argv)
   biomcmc_get_time (time1); 
   arg_parameters params = get_parameters_from_argv (argc, argv);
   if (params.dist->ival[0] < 0) params.dist->ival[0] = 0; 
+  
+  if (params.out->count) {
+    outlength = strlen (params.out->filename[0]);
+    outfilename = (char*) biomcmc_malloc (outlength + 8); // suffixes added later
+    strncpy (outfilename, params.out->filename[0], outlength);
+    outfilename[outlength] = '\0';
+  }
+  else {
+    outlength = strlen ("cluster_uvaia");
+    outfilename = (char*) biomcmc_malloc (outlength + 8); // suffixes added later
+    strncpy (outfilename, "cluster_uvaia", outlength);
+    outfilename[outlength] = '\0';
+  }
+  strcpy (outfilename + outlength, ".csv.xz"); // CSV is saved several times
 
   /* 1. read reference sequence (if missing, use database just to get length) */
   if (params.ref->count) {
@@ -122,12 +136,12 @@ main (int argc, char **argv)
   if (params.dist->ival[0] > (int)(rfas->seqlength) / 10) params.dist->ival[0] = rfas->seqlength / 10;
 
   /* 1.1 one cluster per thread, with char pointers etc*/
-  clust = (cluster_t*) biomcmc_malloc (n_threads * sizeof (cluster_t));
-  for (c = 0; c < n_threads; c++) clust[c] = new_cluster (refseq, rfas->seqlength, params.dist->ival[0], trim);
-  seq_vec    = (char**) biomcmc_malloc (n_threads *sizeof (char*)); // only pointer
-  name_vec   = (char**) biomcmc_malloc (n_threads *sizeof (char*)); // only pointer
-  nchars_vec = (size_t*) biomcmc_malloc (n_threads *sizeof (size_t)); // actual number
-  for (c = 0; c < n_threads; c++) { 
+  clust = (cluster_t*) biomcmc_malloc (n_clust * sizeof (cluster_t));
+  for (c = 0; c < n_clust; c++) clust[c] = new_cluster (refseq, rfas->seqlength, params.dist->ival[0], trim);
+  seq_vec    = (char**) biomcmc_malloc (n_clust *sizeof (char*)); // only pointer
+  name_vec   = (char**) biomcmc_malloc (n_clust *sizeof (char*)); // only pointer
+  nchars_vec = (size_t*) biomcmc_malloc (n_clust *sizeof (size_t)); // actual number
+  for (c = 0; c < n_clust; c++) { 
     seq_vec[c] = name_vec[c] = NULL; 
     nchars_vec[c] = 0;
   }
@@ -142,7 +156,7 @@ main (int argc, char **argv)
 
     while (!end_of_file) {
 #pragma omp single
-      for (c = 0; c < n_threads; c++) { // reads n_threads sequences
+      for (c = 0; c < n_clust; c++) { // reads n_clust sequences
         if (readfasta_next (rfas) >= 0) {
           seq_vec[c] = rfas->seq; rfas->seq = NULL;
           name_vec[c] = rfas->name; rfas->name = NULL;
@@ -155,7 +169,7 @@ main (int argc, char **argv)
       } // single thread for() loop
 
 #pragma omp parallel for shared(c, count, clust, seq_vec, name_vec, nchars_vec, time1)
-      for (c = 0; c < n_threads; c++) if (seq_vec[c]) {
+      for (c = 0; c < n_clust; c++) if (seq_vec[c]) {
         check_seq_against_cluster (clust[c], &(seq_vec[c]), &(name_vec[c]), nchars_vec[c]);
         if (!(++count % print_interval)) {
           fprintf (stderr, "Pool %3d has %d clusters; %d sequences analysed in total; last %d sequences took %4.4lf secs\n", 
@@ -163,39 +177,29 @@ main (int argc, char **argv)
           fflush(stderr);
         }
       }
+      if ((count >= save_interval) && ((count % save_interval) < n_clust)) {
+        fprintf (stderr, "Saving partial clustering info from %d sequences to file %s\n", count, outfilename); fflush(stderr);
+        save_neighbours_to_xz_file (clust, n_clust, outfilename);
+      }
     } // while not end of file
 
     del_readfasta (rfas);
     fprintf (stderr, "Finished reading file %s in %lf secs\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0)); fflush(stderr);
   }
 
-  if (params.out->count) {
-    outlength = strlen (params.out->filename[0]);
-    outfilename = (char*) biomcmc_malloc (outlength + 8); // suffixes added later
-    strncpy (outfilename, params.out->filename[0], outlength);
-    outfilename[outlength] = '\0';
-  }
-  else {
-    outlength = strlen ("cluster_uvaia");
-    outfilename = (char*) biomcmc_malloc (outlength + 8); // suffixes added later
-    strncpy (outfilename, "cluster_uvaia", outlength);
-    outfilename[outlength] = '\0';
-  }
  
-  for (c = 0; c < n_threads; c++) qsort (clust[c]->fs, clust[c]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
+  for (c = 0; c < n_clust; c++) qsort (clust[c]->fs, clust[c]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
 
-  // FIXME this assumes one cluster struct
+  save_neighbours_to_xz_file (clust, n_clust, outfilename);
   strcpy (outfilename + outlength, ".aln.xz");
-  save_cluster_to_xz_file (clust[0], outfilename);
+  save_cluster_to_xz_file (clust, n_clust, outfilename);
 
-  strcpy (outfilename + outlength, ".csv.xz");
-  save_neighbours_to_xz_file (clust[0], outfilename);
     
   fprintf (stderr, "Finished sorting clusters and saving files in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
 
   /* everybody is free to feel good */
   del_arg_parameters (params);
-  for (c = 0; c < n_threads; c++) del_cluster (clust[c]); 
+  for (c = n_clust -1; c >= 0; c--) del_cluster (clust[c]); 
   if (clust) free (clust);
   if (seq_vec) free (seq_vec);
   if (name_vec) free (name_vec);
