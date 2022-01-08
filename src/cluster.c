@@ -200,7 +200,7 @@ main (int argc, char **argv)
 
 //#pragma omp parallel for shared(c, clust, j) private (count)
 //  for (c = 0; c < n_clust; c++) {
-//   count = compact_cluster (clust[c]); 
+//   count = compact_cluster (clust[c]);  // does not improve at all (zero coalescences)
 //    fprintf (stderr, "%d clusters coalesced within queue %d\n", count, c); fflush(stderr);
 //  }
 
@@ -213,8 +213,6 @@ main (int argc, char **argv)
       fprintf (stderr, "%d clusters coalesced between queues %d and %d\n", count, j, i); fflush(stderr);
     }
   }
-  count = compact_cluster (clust[0]); 
-  fprintf (stderr, "%d clusters coalesced within final queue\n", count); fflush(stderr);
 
   //for (c = 0; c < n_clust; c++) qsort (clust[c]->fs, clust[c]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
   qsort (clust[0]->fs, clust[0]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
