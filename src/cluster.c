@@ -27,7 +27,7 @@ get_parameters_from_argv (int argc, char **argv)
   arg_parameters params = {
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
-    .dist    = arg_int0("d","distance", NULL, "seqs with this SNP differences or less will be merged (default=1)"),
+    .dist    = arg_intn("d","distance", NULL, 0, 1, "seqs with this SNP differences or less will be merged (default=1)"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. number of clustering queues (should be larger than avail threads)"),
     .snps    = arg_int0("s","snps", NULL, "how many SNPs w.r.t. reference it keeps track (default=1, should be small number)"),
@@ -103,6 +103,7 @@ main (int argc, char **argv)
   int i, j, c, count = 0, n_clust = 256, print_interval = 5000, save_interval = 10000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
+  double elapsed = 0.;
   size_t trim = 0, outlength = 0, *nchars_vec;
   char *outfilename = NULL, *refseq = NULL, **seq_vec, **name_vec;
   readfasta_t rfas;
@@ -208,17 +209,18 @@ main (int argc, char **argv)
       }
 
       if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
-        fprintf (stderr, "%d sequences analysed in total; last %d sequences took %4.4lf secs\n", count, print_interval, biomcmc_update_elapsed_time (time1)); 
+        elapsed = biomcmc_update_elapsed_time (time1); 
+        fprintf (stderr, "%d sequences analysed in total; last %d sequences took %.3lf secs\n", count, print_interval, elapsed); 
         fflush(stderr);
       }
-      if ((count >= save_interval) && ((count % save_interval) < n_clust)) {
+      if ((count >= save_interval) && ((count % save_interval) < n_clust) && (elapsed > 30)) {
         fprintf (stderr, "Saving partial clustering info from %d sequences to file %s\n", count, outfilename); fflush(stderr);
         save_neighbours_to_xz_file (clust, n_clust, outfilename);
       }
     } // while not end of file
 
     del_readfasta (rfas);
-    fprintf (stderr, "Finished reading file %s in %lf secs; Commulative %d sequences read\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0), count); fflush(stderr);
+    fprintf (stderr, "Finished reading file %s in %.3lf secs; Commulative %d sequences read\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0), count); fflush(stderr);
   }  // for fasta file
 
 //#pragma omp parallel for shared(c, clust, j) private (count)
@@ -227,6 +229,7 @@ main (int argc, char **argv)
 //    fprintf (stderr, "%d clusters coalesced within queue %d\n", count, c); fflush(stderr);
 //  }
 
+  elapsed = biomcmc_update_elapsed_time (time1); // time1 is more finegrained than time0 
   for (c = n_clust; c > 1; c = (c/2 + c%2)) { // reduce (outside parallel loop)
 #pragma omp parallel for shared(clust, c, j) private(count,i)
     for (j = 0; j < c/2; j++) {
@@ -235,6 +238,9 @@ main (int argc, char **argv)
       count = merge_clusters (clust[j], clust[i]); 
       fprintf (stderr, "%d clusters coalesced between queues %d and %d\n", count, j, i); fflush(stderr);
     }
+
+    fprintf (stderr, "%.3lf secs elapsed. Saving partial clustering info from %d sequences to file %s\n", biomcmc_update_elapsed_time (time1), count, outfilename); fflush(stderr);
+    save_neighbours_to_xz_file (clust, n_clust, outfilename);
   }
 
   //for (c = 0; c < n_clust; c++) qsort (clust[c]->fs, clust[c]->n_fs, sizeof (fastaseq_t), compare_fastaseq);

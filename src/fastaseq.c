@@ -171,15 +171,41 @@ add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nc
 int
 merge_clusters (cluster_t clust1, cluster_t clust2)
 {
-  int i, j, k, *score, count = 0;
+  int i, j, k, *score, count = 0, first = 0, last = 0, c2s, c1_n_fs = clust1->n_fs, *dst, maxdst, *idx2;
   fastaseq_t f1, f2;
 
-  qsort (clust1->fs, clust1->n_fs, sizeof (fastaseq_t), compare_fastaseq_score);
-  qsort (clust2->fs, clust2->n_fs, sizeof (fastaseq_t), compare_fastaseq_score);
+  qsort (clust1->fs, clust1->n_fs, sizeof (fastaseq_t), compare_fastaseq_score); // decreasing score (i.e. distance from reference)
+  qsort (clust2->fs, clust2->n_fs, sizeof (fastaseq_t), compare_fastaseq_score); // cannot count on order since adding clust2 may change medoid dist to ref
   score = (int*) biomcmc_malloc ((size_t)(clust1->n_score + 2) * sizeof (int));
 
-  for (j = 0; j < clust2->n_fs; j++) {
-    for (i = 0; i < clust1->n_fs; i++) if (abs(clust1->fs[i]->score[0] - clust2->fs[j]->score[0]) <= clust1->mindist) { // only if within ball ring from reference 
+  /* preprocess list of dists indices for clust1 */
+  maxdst = clust1->fs[0]->score[0]; // maximum distance to reference
+  dst = (int*) biomcmc_malloc ((maxdst + 1) * sizeof (int)); // dst[i] = first index of distance i
+  for (i = 0; i <= clust1->fs[0]->score[0]; i++) dst[i] = -1;
+  for (i = 0; i < c1_n_fs; i++) if (dst[ clust1->fs[i]->score[0] ] < 0) dst[ clust1->fs[i]->score[0] ]  = i;
+ 
+  /* preprocess list of dists indices for clust2 */
+  idx2 = (int*) biomcmc_malloc (2 * (clust2->fs[0]->score[0] + 1) * sizeof (int)); // idx in cluster 1 of lower and upper dist bounds
+  for (i = 0; i < 2 * (clust2->fs[0]->score[0] + 1); i++) idx2[i] = -1;
+  for (j = 0; j < clust2->n_fs; j++) if (idx2[2 * clust2->fs[j]->score[0]] < 0) {
+    c2s = clust2->fs[j]->score[0];
+    for(i = c2s + clust1->mindist; (i >= 0) && (i <= maxdst) && (dst[i] < 0); i++); // as i increases dst[i] decreases
+    if ((i >= 0) && (i <= maxdst)) first = dst[i]; // we have to care for both borders since clust1 and clust2 may not overlap... 
+    else first = 0;                                 // e.g. clust1 dists = {0 ... 10} but clust2 dist = 15
+    for(i = c2s - clust1->mindist - 1; (i >= 0) && (i <= maxdst) && (dst[i] < 0); i--); // as i decreases dst[i] increases; minus one since we want last idx before this distance
+    if ((i >= 0) && (i <= maxdst)) last = dst[i];
+    else last = c1_n_fs;
+    idx2[2 * c2s] = first; 
+    idx2[(2 * c2s) + 1] = last; 
+    //printf ("DEBUG:: j=%d dist=%d first=%d last=%d dst[0]=%d dst[%d]=%d\n", j, c2s, first, last, dst[0], maxdst, dst[maxdst]);
+  }
+  //for (j=0; j <= clust2->fs[0]->score[0]; j++) printf ("idx2[%d] = [%3d %3d]\n", j, idx2[2*j], idx2[(2*j)+1]);
+  
+  for (j = 0; j < clust2->n_fs; j++) { 
+    c2s = clust2->fs[j]->score[0];
+    first = idx2[2 * c2s]; last = idx2[(2 * c2s) + 1];
+    // c1_n_fs does not change when new clust2 elements are added to clust1 (no need to compare clust2 with itself)
+    for (i = first; i < last; i++) if (abs(c2s - clust1->fs[i]->score[0]) <= clust1->mindist) { // only if within ball ring from reference 
       f1 = clust1->fs[i]; f2 = clust2->fs[j]; // nicknames to avoid silly mistakes
       quick_pairwise_score_truncated (f1->seq + clust1->trim, f2->seq + clust1->trim, (int) (clust1->nchars - 2 * clust1->trim), clust1->mindist+1, score, 0);
       if (score[0] <= clust1->mindist) { // medoid will be decided by score[n_score+1] which was already calculated with or without reference
@@ -195,7 +221,7 @@ merge_clusters (cluster_t clust1, cluster_t clust2)
         break; // breaks clust1 loop 
       } // within distance
     } // for i in clust1
-    if (i == clust1->n_fs) { // clust2 not similar to any existing clust1; will increase clust1 size
+    if (i == last) { // clust2 not similar to any existing clust1; will increase clust1 size 
       clust1->fs = (fastaseq_t*) biomcmc_realloc ((fastaseq_t*) clust1->fs, (clust1->n_fs+1) * sizeof (fastaseq_t));
       clust1->fs[clust1->n_fs++] = clust2->fs[j];
       clust2->fs[j] = NULL;
@@ -205,11 +231,13 @@ merge_clusters (cluster_t clust1, cluster_t clust2)
   clust2->fs = NULL;
   clust2->n_fs = 0;
   if (score) free (score);
+  if (dst) free (dst);
+  if (idx2) free (idx2);
   return count;
 }
 
 int
-compact_cluster (cluster_t clust)
+compact_cluster (cluster_t clust) // not useful
 {
   int i, j, k, *score, count = 0;
   fastaseq_t f1, f2;
@@ -468,8 +496,7 @@ quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int
   for (i = 1; i <= n_score; i++) score[i] = -1; 
 
   for (i=0; (i < nsites) && (score[0] < maxdist); i++) {
-    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?') ||
-        (s1[i] == 'X') || (s2[i] == 'X') || (s1[i] == 'O') || (s2[i] == 'O') || (s1[i] == '.') || (s2[i] == '.')) continue; // skip this column
+    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
     score[0]++;
     if (s1[i] == s2[i]) score[0]--;
     if ((n_score) && (score[0]) && (score[0] <= n_score) && (score[score[0]] < 0)) score[ score[0] ] = i; // n-th difference between s1 and s2
