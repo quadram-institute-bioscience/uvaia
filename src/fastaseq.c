@@ -10,7 +10,8 @@
 
 int compare_fastaseq (const void *a, const void *b);
 int compare_fastaseq_score (const void *a, const void *b);
-int quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist);
+void quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score, int n_score);
+int quick_count_sequence_non_N (char *s, size_t nsites);
 
 int
 compare_fastaseq (const void *a, const void *b)
@@ -23,21 +24,25 @@ compare_fastaseq (const void *a, const void *b)
 int
 compare_fastaseq_score (const void *a, const void *b)
 {  
-  double res_d;
-  res_d = (*(fastaseq_t*)b)->score[1] - (*(fastaseq_t*)a)->score[1]; // decreasing distance from reference
-  if (res_d < 0.) return -1;
-  if (res_d > 1e-6) return 1;
-  res_d = (*(fastaseq_t*)b)->score[0] - (*(fastaseq_t*)a)->score[0]; // increasing uncertainty 
-  if (res_d < -1e-6) return -1;
-  return 1;
+  int i, res;
+  for (i = 0; i < (*(fastaseq_t*)b)->n_score + 2; i++) { // decreasing distance from reference, distance to first SNPs, non-Ns
+    res = (*(fastaseq_t*)b)->score[i] - (*(fastaseq_t*)a)->score[i];
+    if (res) return res;
+  }
+  return -1;
 }
 
 fastaseq_t
-new_fastaseq (void)
+new_fastaseq (int n_score)
 {
+  int i;
   fastaseq_t fs = (fastaseq_t) biomcmc_malloc (sizeof (struct fastaseq_struct));
   fs->n_nn = 0;
-  fs->score[0] = fs->score[1] = 0.;
+  if (n_score < 0) n_score = 0;
+  fs->n_score = n_score; // position of first SNPs 
+  fs->score = (int*) biomcmc_malloc ((size_t)(n_score + 2) * sizeof (int)); // +1 for total distance (= score[0] )
+  // score = [dist_to_ref, loc_of_SNP_1, loc_of_SNP_2,..., loc_of_SNP_n, number of ACGT+]
+  for (i=0; i < n_score + 2; i++) fs->score[i] = 0;
   fs->nchars = 0;
   fs->name = fs->seq = NULL;
   fs->nn = NULL;
@@ -53,14 +58,15 @@ del_fastaseq (fastaseq_t fs)
     for (i = fs->n_nn-1; i >= 0; i--) if (fs->nn[i]) free (fs->nn[i]);
     free (fs->nn);
   }
-  if (fs->name) free (fs->name);
-  if (fs->seq)  free (fs->seq);
+  if (fs->score) free (fs->score);
+  if (fs->name)  free (fs->name);
+  if (fs->seq)   free (fs->seq);
   free (fs);
   return;
 }
 
 void
-update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, double *score)
+update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, int *score)
 {
   // 1. replace sequence info 
   if (to->seq) free (to->seq);
@@ -75,18 +81,18 @@ update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, double 
   to->name = *name;
   *name = NULL;
   // 4. update score and seq length info
-  to->score[0] = score[0];
-  to->score[1] = score[1];
+  for (int i = 0; i < to->n_score + 2; i++) to->score[i] = score[i];
   to->nchars = nchars; // we assume checks were done outside this function; we accept new sequence length
 }
 
 cluster_t
-new_cluster (char *seq, size_t nchars, int mindist, size_t trim)
+new_cluster (char *seq, size_t nchars, int mindist, size_t trim, int n_score)
 {
   cluster_t clust = (cluster_t) biomcmc_malloc (sizeof (struct cluster_struct));
   clust->fs = NULL;
   clust->n_fs = 0;
-  clust->mindist = (double) mindist;
+  clust->mindist = mindist;
+  clust->n_score = n_score;
   clust->trim = trim;
   if (seq) {
     clust->reference = (char*) biomcmc_malloc ((nchars+1) * sizeof (char));
@@ -111,94 +117,54 @@ del_cluster (cluster_t clust)
 }
 
 void
-check_seq_against_cluster_old (cluster_t clust, char **seq, char **name, size_t nchars)
-{
-  int i;
-  double result[5], score[2]; // score = {proportion non-N, text dist to reference}
-
-  if (nchars != clust->nchars) 
-    biomcmc_error ("%s cannot work with unaligned sequences; sequence %s has %lu sites while reference has %d.", PACKAGE_STRING, *name, nchars, clust->nchars);
-
-  upper_kseq (*seq, nchars); // must be _before_ count_sequence
-  biomcmc_count_sequence_acgt (*seq, nchars, result); 
-  score[0] = 1. - result[2];
-  for (i = 0; i < clust->n_fs; i++) {
-    biomcmc_pairwise_score_matches (*seq + clust->trim, clust->fs[i]->seq + clust->trim, (int) nchars - 2 * clust->trim, result);
-    if ((result[4] - result[2]) <= clust->mindist) { // result[2] = weighted compatible i.e. W<->W is 25% compatible ; result[4] = valid sites
-      if ((result[1] == result[4]) && (score[0] > clust->fs[i]->score[0])) { // seq is more resolved than existing medoid
-        if (clust->reference) {
-          biomcmc_pairwise_score_matches (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, result);
-          score[1] = result[1]; // result[1] = text match (i.e. B<->Q)
-        }
-        else score[1] = score[0]; // if reference is absent, then medoid will have lowest number of Ns
-      }
-      else { score[1] = 0.; } // seq cannot be new medoid 
-
-      add_seq_to_cluster (clust, i, seq, name, nchars, score);
-      return;
-    }
-  }
-  // not similar to any existing cluster
-  if (clust->reference) {
-    biomcmc_pairwise_score_matches (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, result);
-    score[1] = result[1]; // result[1] = text match (i.e. B<->Q), and medoid will be farthest from reference
-  }
-  else score[1] = score[0]; // if reference is absent, then medoid will have lowest number of Ns
-
-  add_seq_to_cluster (clust, i, seq, name, nchars, score);
-  return;
-}
-
-void
 check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t nchars)
 {
-  int i, distance = 0;
-  double result[5], score[2]; // score = {proportion non-N, text dist to reference}
+  int i;
+  size_t scorelength = (size_t)(clust->n_score) + 2;
+  int *score; // score = {dist to reference, locations of first SNPs w.r.t. ref, number of ACGT (non-N actually)}
 
   if (nchars != clust->nchars) 
     biomcmc_error ("%s cannot work with unaligned sequences; sequence %s has %lu sites while reference has %d.", PACKAGE_STRING, *name, nchars, clust->nchars);
 
+  score = (int*) biomcmc_malloc (scorelength * sizeof (int));
   upper_kseq (*seq, nchars); // must be _before_ count_sequence
-  biomcmc_count_sequence_acgt (*seq, nchars, result); 
-  score[0] = 1. - result[2];
+  score[scorelength-1] = quick_count_sequence_non_N (*seq, nchars); // last element of score vector 
   for (i = 0; i < clust->n_fs; i++) {
-    distance = quick_pairwise_score_truncated (*seq + clust->trim, clust->fs[i]->seq + clust->trim, (int) nchars - 2 * clust->trim, clust->mindist+1);
-    if (distance <= clust->mindist) { // text matches (hamming distance) 
-      if ((!distance) && (score[0] > clust->fs[i]->score[0])) { // seq is more resolved than existing medoid
+    quick_pairwise_score_truncated (*seq + clust->trim, clust->fs[i]->seq + clust->trim, (int) nchars - 2 * clust->trim, clust->mindist+1, score, 0); // zero -> dont annotate SNP locations
+    if (score[0] <= clust->mindist) { // text matches (hamming distance) (BTW this distance score[0] is not used downstream) 
+      if ((!score[0]) && (score[scorelength-1] > clust->fs[i]->score[scorelength-1])) { // seq is more resolved than existing medoid
         if (clust->reference) { // here we use standard biomcmc distance calculation
-          biomcmc_pairwise_score_matches (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, result);
-          score[1] = result[1]; // result[1] = text match (i.e. B<->Q)
+          // all but last element are relative to reference; last element not touched by quick_pairwise
+          quick_pairwise_score_truncated (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, nchars/2, score, clust->n_score);
         }
-        else score[1] = score[0]; // if reference is absent, then medoid will have lowest number of Ns
+        //else, if reference is absent, then medoid will have lowest number of Ns which is already in score[scorelength-1]
       }
-      else { score[1] = 0.; } // seq cannot be new medoid 
-
+      else { score[scorelength] = 0.; } // seq cannot be new medoid; pretend it's all N so just name (but not sequence) is stored in neighbour list
       add_seq_to_cluster (clust, i, seq, name, nchars, score);
+      if (score) free (score);
       return;
     }
   }
   // not similar to any existing cluster
   if (clust->reference) {
-    biomcmc_pairwise_score_matches (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, result);
-    score[1] = result[1]; // result[1] = text match (i.e. B<->Q), and medoid will be farthest from reference
+    quick_pairwise_score_truncated (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, nchars/2, score, clust->n_score);
   }
-  else score[1] = score[0]; // if reference is absent, then medoid will have lowest number of Ns
-
   add_seq_to_cluster (clust, i, seq, name, nchars, score);
+  if (score) free (score);
   return;
 }
 
 void
-add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, double *score)
+add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, int *score)
 {
   if (idx >= clust->n_fs) { // new cluster, no similar sequences in cluster set
     idx = clust->n_fs;
     clust->fs = (fastaseq_t*) biomcmc_realloc ((fastaseq_t*) clust->fs, (++clust->n_fs) * sizeof (fastaseq_t));
-    clust->fs[idx] = new_fastaseq ();
+    clust->fs[idx] = new_fastaseq (clust->n_score);
     update_fasta_seq (clust->fs[idx], seq, name, nchars, score);
     return;
   }
-  if (score[1] > clust->fs[idx]->score[1]) { // existing cluster, this sequence is new medoid since furthest from reference
+  if (score[clust->n_score+1] > clust->fs[idx]->score[clust->n_score+1]) { // existing cluster, this sequence is new medoid since furthest from reference
     update_fasta_seq (clust->fs[idx], seq, name, nchars, score);
     return;
   }
@@ -214,20 +180,18 @@ add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nc
 int
 merge_clusters (cluster_t clust1, cluster_t clust2)
 {
-  int i, j, k, distance = 0, count = 0;
+  int i, j, k, *score, count = 0;
   fastaseq_t f1, f2;
 
   qsort (clust1->fs, clust1->n_fs, sizeof (fastaseq_t), compare_fastaseq_score);
   qsort (clust2->fs, clust2->n_fs, sizeof (fastaseq_t), compare_fastaseq_score);
+  score = (int*) biomcmc_malloc ((size_t)(clust1->n_score + 2) * sizeof (int));
 
   for (j = 0; j < clust2->n_fs; j++) {
     for (i = 0; i < clust1->n_fs; i++) {
       f1 = clust1->fs[i]; f2 = clust2->fs[j]; // nicknames to avoid silly mistakes
-      distance = quick_pairwise_score_truncated (f1->seq + clust1->trim, f2->seq + clust1->trim, (int) (clust1->nchars - 2 * clust1->trim), clust1->mindist+1);
-      if (distance <= clust1->mindist) { // result[2] = weighted compatible i.e. W<->W is 25% compatible ; result[4] = valid sites
-        //if (result[1] != result[4]) f2->score[1] = 0.; // clust2 cannot be new medoid, less resolved than clust1 
-        if (distance) f2->score[1] = 0.; // clust2 cannot be new medoid, less resolved than clust1 
-
+      quick_pairwise_score_truncated (f1->seq + clust1->trim, f2->seq + clust1->trim, (int) (clust1->nchars - 2 * clust1->trim), clust1->mindist+1, score, 0);
+      if (score[0] <= clust1->mindist) { // medoid will be decided by score[n_score+1] which was already calculated with or without reference
         add_seq_to_cluster (clust1, i, &(f2->seq), &(f2->name), f2->nchars, f2->score);
         if (f2->nn) {
           f1->nn = (char**) biomcmc_realloc ((char**) f1->nn, (f1->n_nn + f2->n_nn) * sizeof (char*));
@@ -249,20 +213,22 @@ merge_clusters (cluster_t clust1, cluster_t clust2)
   if (clust2->fs) free (clust2->fs);
   clust2->fs = NULL;
   clust2->n_fs = 0;
+  if (score) free (score);
   return count;
 }
 
 int
 compact_cluster (cluster_t clust)
 {
-  int i, j, k, distance = 0, count = 0;
+  int i, j, k, *score, count = 0;
   fastaseq_t f1, f2;
+
+  score = (int*) biomcmc_malloc ((size_t)(clust->n_score + 2) * sizeof (int));
 
   for (i = 0; i < clust->n_fs-1; i++) for (j = i + 1; j < clust->n_fs; j++) if (clust->fs[i] && clust->fs[j]) {
     f1 = clust->fs[i]; f2 = clust->fs[j];
-    distance = quick_pairwise_score_truncated (f1->seq + clust->trim, f2->seq + clust->trim, (int) (clust->nchars - 2 * clust->trim), clust->mindist+1);
-    if (distance <= clust->mindist) { 
-      if (distance) f2->score[1] = 0.; // clust2 cannot be new medoid, less resolved than clust1 
+    quick_pairwise_score_truncated (f1->seq + clust->trim, f2->seq + clust->trim, (int) (clust->nchars - 2 * clust->trim), clust->mindist+1, score, 0);
+    if (score[0] <= clust->mindist) { 
       add_seq_to_cluster (clust, i, &(f2->seq), &(f2->name), f2->nchars, f2->score);
       if (f2->nn) {
         f1->nn = (char**) biomcmc_realloc ((char**) f1->nn, (f1->n_nn + f2->n_nn) * sizeof (char*));
@@ -278,6 +244,7 @@ compact_cluster (cluster_t clust)
   for (j = 0, i = 0; i < clust->n_fs; i++) if (clust->fs[i]) clust->fs[j++] = clust->fs[i]; // only non-null
   clust->n_fs = j;
   clust->fs = (fastaseq_t*) biomcmc_realloc ((fastaseq_t*) clust->fs, (clust->n_fs) * sizeof (fastaseq_t));
+  if (score) free (score);
   return count;
 }
 
@@ -475,15 +442,54 @@ del_readfasta (readfasta_t rfas)
 }
 
 int
-quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist)
-{ // assumes upper(), and just count text matches
-  int i, diff = 0;
+accumulate_reference_sequence (char **ref, char *s, size_t nsites)
+{ // quick-and-dirty version of biomcmc would do
+  size_t i=0;
+  int count = 0; // number of non_ACGT
 
-  for (i=0; (i < nsites) && (diff < maxdist); i++) {
-    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
-    diff++;
-    if (s1[i] == s2[i]) diff--;
+  if (!(*ref)) {
+    *ref = biomcmc_malloc (nsites * sizeof (char));
+    memcpy (*ref, s, nsites);
+    for (i = 0; i < nsites; i++) {
+      (*ref)[i] = toupper ((*ref)[i]);
+      if (((*ref)[i] != 'A') && ((*ref)[i] != 'C') && ((*ref)[i] != 'G') && ((*ref)[i] != 'T')) { (*ref)[i] = 'N'; count++; }
+    }
+    return count;
   }
-  return diff;
+
+  for (i = 0; i < nsites; i++) {
+    s[i] = toupper (s[i]);
+    if ((*ref)[i] == 'N') {
+      if ((s[i] == 'A') || (s[i] == 'C') || (s[i] == 'G') || (s[i] == 'T')) (*ref)[i] = s[i];
+      else count++;
+    }
+  }
+  return count;
+}
+
+
+void
+quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score, int n_score)
+{ // assumes upper(), and just count text matches; optionally stores location of first n_score differences
+  int i;
+  score[0] = 0;
+  for (i = 1; i <= n_score; i++) score[i] = -1; 
+
+  for (i=0; (i < nsites) && (score[0] < maxdist); i++) {
+    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?') ||
+        (s1[i] == 'X') || (s2[i] == 'X') || (s1[i] == 'O') || (s2[i] == 'O') || (s1[i] == '.') || (s2[i] == '.')) continue; // skip this column
+    score[0]++;
+    if (s1[i] == s2[i]) score[0]--;
+    if ((n_score) && (score[0]) && (score[0] <= n_score) && (score[score[0]] < 0)) score[ score[0] ] = i; // n-th difference between s1 and s2
+  }
+  return;
+}
+
+int
+quick_count_sequence_non_N (char *s, size_t nsites)
+{
+  int non_n = nsites;
+  for (size_t i = 0; i < nsites; i++) if ((s[i] == 'N') || (s[i] == '-') || (s[i] == '?') || (s[i] == 'X') || (s[i] == 'O') || (s[i] == '.')) non_n--;
+  return non_n;
 }
 

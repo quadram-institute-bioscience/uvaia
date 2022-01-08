@@ -9,6 +9,7 @@ typedef struct
   struct arg_int  *dist;
   struct arg_int  *trim;
   struct arg_int  *pool;
+  struct arg_int  *snps;
   struct arg_file *ref;
   struct arg_file *fasta;
   struct arg_file *out;
@@ -29,15 +30,17 @@ get_parameters_from_argv (int argc, char **argv)
     .dist    = arg_int0("d","distance", NULL, "seqs with this SNP differences or less will be merged (default=1)"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. number of clustering queues (should be larger than avail threads)"),
+    .snps    = arg_int0("s","snps", NULL, "how many SNPs w.r.t. reference it keeps track (default=1, should be small number)"),
     .ref     = arg_filen("r","reference", "<ref.fa(.gz,.xz)>", 0, 1, "reference sequence (medoids are furthest from it)"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa(.gz,.xz)>", 1, 1024, "alignments to merge"),
     .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment and cluster table files"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.dist, params.trim, params.pool, params.ref, params.fasta, params.out, params.end};
+  void* argtable[] = {params.help, params.version, params.dist, params.trim, params.pool, params.snps, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.dist->ival[0] = 1;
   params.trim->ival[0] = 0;
+  params.snps->ival[0] = 1;
 #ifdef _OPENMP
   params.pool->ival[0] = 4 * omp_get_max_threads (); // default is to have quite a few
 #else
@@ -59,6 +62,7 @@ del_arg_parameters (arg_parameters params)
   if (params.dist)  free (params.dist);
   if (params.trim) free (params.trim);
   if (params.pool) free (params.pool);
+  if (params.snps) free (params.snps);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.out)   free (params.out);
@@ -96,7 +100,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int i, j, c, count = 0, n_clust = 256, print_interval = 1000, save_interval = 5000;
+  int i, j, c, count = 0, n_clust = 256, print_interval = 5000, save_interval = 10000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   size_t trim = 0, outlength = 0, *nchars_vec;
@@ -108,6 +112,7 @@ main (int argc, char **argv)
   biomcmc_get_time (time1); 
   arg_parameters params = get_parameters_from_argv (argc, argv);
   if (params.dist->ival[0] < 0) params.dist->ival[0] = 0; 
+  if (params.snps->ival[0] < 0) params.snps->ival[0] = 0;
 
 #ifdef _OPENMP
   n_clust = omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
@@ -116,6 +121,9 @@ main (int argc, char **argv)
   biomcmc_warning ("Program compiled without multithread support");
 #endif
   if (params.pool->ival[0] >= n_clust) n_clust = params.pool->ival[0];
+  fprintf (stderr, "Creating a pool of %d cluster queues; maximum distance is %d, and %d SNP locations are kept\n", 
+           n_clust,params.dist->ival[0], params.snps->ival[0]); 
+  fflush(stderr);
 
   
   if (params.out->count) {
@@ -132,16 +140,24 @@ main (int argc, char **argv)
   }
   strcpy (outfilename + outlength, ".csv.xz"); // CSV is saved several times
 
-  /* 1. read reference sequence (if missing, use database just to get length) */
+  /* 1. read reference sequence. If missing, use database to create a dummy sequence (composed of ACGT) */
   if (params.ref->count) {
     rfas = new_readfasta (params.ref->filename[0]);
     refseq = rfas->seq;
+    readfasta_next (rfas);
+    fprintf (stderr, "Reading first sequence from %s as reference\n", params.fasta->filename[0]); 
   }
   else {
     rfas = new_readfasta (params.fasta->filename[0]);
-    refseq = NULL;
+    j = -1; count = 0xff; // count is number of non-ACGT sites
+    for (i = 0; (readfasta_next (rfas) > 0) && (count) && (i < 512); i++) {
+      if (j < 0) j = (int) rfas->seqlength;
+      else if (j != (int) rfas->seqlength) 
+        biomcmc_error ("Sequences should be aligned; first sequence has %d sites but sequence %s has %lu sites\n", j, rfas->name, rfas->seqlength);
+      count = accumulate_reference_sequence (&refseq, rfas->seq, rfas->seqlength); // merging of ACGT sites
+    }
+    fprintf (stderr, "Generating a reference from first 512 sequences or less in %s\n", params.fasta->filename[0]); 
   }
-  readfasta_next (rfas);
   
   if (params.trim->ival[0] > 0) trim = (size_t) params.trim->ival[0];
   if (trim > rfas->seqlength / 2.1) trim = rfas->seqlength / 2.1; // if we trim more than 1/2 the genome there's nothing left
@@ -149,7 +165,7 @@ main (int argc, char **argv)
 
   /* 1.1 one cluster per thread, with char pointers etc*/
   clust = (cluster_t*) biomcmc_malloc (n_clust * sizeof (cluster_t));
-  for (c = 0; c < n_clust; c++) clust[c] = new_cluster (refseq, rfas->seqlength, params.dist->ival[0], trim);
+  for (c = 0; c < n_clust; c++) clust[c] = new_cluster (refseq, rfas->seqlength, params.dist->ival[0], trim, params.snps->ival[0]);
   seq_vec    = (char**) biomcmc_malloc (n_clust *sizeof (char*)); // only pointer
   name_vec   = (char**) biomcmc_malloc (n_clust *sizeof (char*)); // only pointer
   nchars_vec = (size_t*) biomcmc_malloc (n_clust *sizeof (size_t)); // actual number
@@ -159,8 +175,10 @@ main (int argc, char **argv)
   }
  
   del_readfasta (rfas);
+  if (refseq) free (refseq);
   
   /* 2. read alignment files (can be several) */
+  count = 0;
   for (j = 0; j < params.fasta->count; j++) {
     rfas = new_readfasta (params.fasta->filename[j]);
     end_of_file = false;
@@ -169,6 +187,7 @@ main (int argc, char **argv)
 #pragma omp single
       for (c = 0; c < n_clust; c++) { // reads n_clust sequences
         if (readfasta_next (rfas) >= 0) {
+          count++;
           seq_vec[c] = rfas->seq; rfas->seq = NULL;
           name_vec[c] = rfas->name; rfas->name = NULL;
           nchars_vec[c] = rfas->seqlength;
@@ -179,14 +198,18 @@ main (int argc, char **argv)
         }
       } // single thread for() loop
 
-#pragma omp parallel for shared(c, count, clust, seq_vec, name_vec, nchars_vec, time1)
+#pragma omp parallel for shared(c, count, clust, seq_vec, name_vec, nchars_vec)
       for (c = 0; c < n_clust; c++) if (seq_vec[c]) {
         check_seq_against_cluster (clust[c], &(seq_vec[c]), &(name_vec[c]), nchars_vec[c]);
-        if (!(++count % print_interval)) { // FIXME: time1 and count have race condition
-          fprintf (stderr, "Queue %3d has %d clusters; %d sequences analysed in total; last %d sequences took %4.4lf secs\n", 
-                   c, clust[c]->n_fs, count, print_interval, biomcmc_update_elapsed_time (time1)); 
+        if (!(clust[c]->n_fs % print_interval) && !(count%4)) { // cont%4 to avoid consecutive prints
+          fprintf (stderr, "Queue %3d / %d has %d clusters; %d sequences analysed in total;\n", c, n_clust, clust[c]->n_fs, count); 
           fflush(stderr);
         }
+      }
+
+      if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
+        fprintf (stderr, "%d sequences analysed in total; last %d sequences took %4.4lf secs\n", count, print_interval, biomcmc_update_elapsed_time (time1)); 
+        fflush(stderr);
       }
       if ((count >= save_interval) && ((count % save_interval) < n_clust)) {
         fprintf (stderr, "Saving partial clustering info from %d sequences to file %s\n", count, outfilename); fflush(stderr);
@@ -195,8 +218,8 @@ main (int argc, char **argv)
     } // while not end of file
 
     del_readfasta (rfas);
-    fprintf (stderr, "Finished reading file %s in %lf secs\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0)); fflush(stderr);
-  }
+    fprintf (stderr, "Finished reading file %s in %lf secs; Commulative %d sequences read\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0), count); fflush(stderr);
+  }  // for fasta file
 
 //#pragma omp parallel for shared(c, clust, j) private (count)
 //  for (c = 0; c < n_clust; c++) {
