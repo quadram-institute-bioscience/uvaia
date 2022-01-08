@@ -128,27 +128,18 @@ check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t ncha
 
   score = (int*) biomcmc_malloc (scorelength * sizeof (int));
   upper_kseq (*seq, nchars); // must be _before_ count_sequence
-  score[scorelength-1] = quick_count_sequence_non_N (*seq, nchars); // last element of score vector 
-  for (i = 0; i < clust->n_fs; i++) {
+  score[scorelength-1] = quick_count_sequence_non_N (*seq, nchars); // last element of score vector is not touched by quick_pairwise (unless you provide a larger n_score)
+  quick_pairwise_score_truncated (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, nchars/2, score, clust->n_score);
+  for (i = 0; i < clust->n_fs; i++) if (abs(score[0] - clust->fs[i]->score[0]) <= clust->mindist) { // only if within ball ring from reference
     quick_pairwise_score_truncated (*seq + clust->trim, clust->fs[i]->seq + clust->trim, (int) nchars - 2 * clust->trim, clust->mindist+1, score, 0); // zero -> dont annotate SNP locations
     if (score[0] <= clust->mindist) { // text matches (hamming distance) (BTW this distance score[0] is not used downstream) 
-      if ((!score[0]) && (score[scorelength-1] > clust->fs[i]->score[scorelength-1])) { // seq is more resolved than existing medoid
-        if (clust->reference) { // here we use standard biomcmc distance calculation
-          // all but last element are relative to reference; last element not touched by quick_pairwise
-          quick_pairwise_score_truncated (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, nchars/2, score, clust->n_score);
-        }
-        //else, if reference is absent, then medoid will have lowest number of Ns which is already in score[scorelength-1]
-      }
-      else { score[scorelength] = 0.; } // seq cannot be new medoid; pretend it's all N so just name (but not sequence) is stored in neighbour list
+      if (score[0]) score[scorelength] = 0.;  // seq has SNP wrt current medoid; pretend it's all N so just name (but not sequence) is stored in neighbour list
       add_seq_to_cluster (clust, i, seq, name, nchars, score);
       if (score) free (score);
       return;
     }
   }
   // not similar to any existing cluster
-  if (clust->reference) {
-    quick_pairwise_score_truncated (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, nchars/2, score, clust->n_score);
-  }
   add_seq_to_cluster (clust, i, seq, name, nchars, score);
   if (score) free (score);
   return;
@@ -188,7 +179,7 @@ merge_clusters (cluster_t clust1, cluster_t clust2)
   score = (int*) biomcmc_malloc ((size_t)(clust1->n_score + 2) * sizeof (int));
 
   for (j = 0; j < clust2->n_fs; j++) {
-    for (i = 0; i < clust1->n_fs; i++) {
+    for (i = 0; i < clust1->n_fs; i++) if (abs(clust1->fs[i]->score[0] - clust2->fs[j]->score[0]) <= clust1->mindist) { // only if within ball ring from reference 
       f1 = clust1->fs[i]; f2 = clust2->fs[j]; // nicknames to avoid silly mistakes
       quick_pairwise_score_truncated (f1->seq + clust1->trim, f2->seq + clust1->trim, (int) (clust1->nchars - 2 * clust1->trim), clust1->mindist+1, score, 0);
       if (score[0] <= clust1->mindist) { // medoid will be decided by score[n_score+1] which was already calculated with or without reference
@@ -225,7 +216,8 @@ compact_cluster (cluster_t clust)
 
   score = (int*) biomcmc_malloc ((size_t)(clust->n_score + 2) * sizeof (int));
 
-  for (i = 0; i < clust->n_fs-1; i++) for (j = i + 1; j < clust->n_fs; j++) if (clust->fs[i] && clust->fs[j]) {
+  for (i = 0; i < clust->n_fs-1; i++) for (j = i + 1; j < clust->n_fs; j++) 
+    if ((clust->fs[i] && clust->fs[j]) && (abs(clust->fs[i]->score[0] - clust->fs[j]->score[0]) <= clust->mindist)) { // only if within ball ring from reference 
     f1 = clust->fs[i]; f2 = clust->fs[j];
     quick_pairwise_score_truncated (f1->seq + clust->trim, f2->seq + clust->trim, (int) (clust->nchars - 2 * clust->trim), clust->mindist+1, score, 0);
     if (score[0] <= clust->mindist) { 

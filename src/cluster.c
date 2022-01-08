@@ -244,7 +244,6 @@ main (int argc, char **argv)
   strcpy (outfilename + outlength, ".aln.xz");
   save_cluster_to_xz_file (clust, 1, outfilename);
 
-    
   fprintf (stderr, "Finished sorting clusters and saving files in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
 
   /* everybody is free to feel good */
