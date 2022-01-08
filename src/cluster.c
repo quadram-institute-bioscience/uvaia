@@ -8,6 +8,7 @@ typedef struct
   struct arg_lit  *version;
   struct arg_int  *dist;
   struct arg_int  *trim;
+  struct arg_int  *pool;
   struct arg_file *ref;
   struct arg_file *fasta;
   struct arg_file *out;
@@ -27,15 +28,22 @@ get_parameters_from_argv (int argc, char **argv)
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .dist    = arg_int0("d","distance", NULL, "seqs with this SNP differences or less will be merged (default=1)"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
+    .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. number of clustering queues (should be larger than avail threads)"),
     .ref     = arg_filen("r","reference", "<ref.fa(.gz,.xz)>", 0, 1, "reference sequence (medoids are furthest from it)"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa(.gz,.xz)>", 1, 1024, "alignments to merge"),
     .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment and cluster table files"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.dist, params.trim, params.ref, params.fasta, params.out, params.end};
+  void* argtable[] = {params.help, params.version, params.dist, params.trim, params.pool, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.dist->ival[0] = 1;
   params.trim->ival[0] = 0;
+#ifdef _OPENMP
+  params.pool->ival[0] = 4 * omp_get_max_threads (); // default is to have quite a few
+#else
+  params.pool->ival[0] = 4;
+#endif 
+
   /* actual parsing: */
   if (arg_nullcheck(params.argtable)) biomcmc_error ("Problem allocating memory for the argtable (command line arguments) structure");
   arg_parse (argc, argv, params.argtable); // returns >0 if errors were found, but this info also on params.end->count
@@ -50,6 +58,7 @@ del_arg_parameters (arg_parameters params)
   if (params.version) free (params.version);
   if (params.dist)  free (params.dist);
   if (params.trim) free (params.trim);
+  if (params.pool) free (params.pool);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
   if (params.out)   free (params.out);
@@ -75,7 +84,8 @@ print_usage (arg_parameters params, char *progname)
   if (params.help->count) {
     printf ("One-pass clustering similar to canopy clustering with single, tight distance.\n");
     printf ("If a reference file is provided, its first sequence is used s.t. medoids are updated when resolve a previous one and are farther from it.\n");
-    printf ("Otherwise a medoid is the most resolved (less Ns, with no SNP contradicting previous medoid) in cluster\n\n.");
+    printf ("Otherwise a medoid is the most resolved (less Ns, with no SNP contradicting previous medoid) in cluster\n.");
+    printf ("A pool of independent clustering queues is created, such that each sequence is compared to only one of them at first.\n\n");
   }
 
   del_arg_parameters (params);
@@ -86,7 +96,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, count = 0, n_clust = 1, print_interval = 500, save_interval = 2000;
+  int i, j, c, count = 0, n_clust = 256, print_interval = 1000, save_interval = 5000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   size_t trim = 0, outlength = 0, *nchars_vec;
@@ -94,17 +104,19 @@ main (int argc, char **argv)
   readfasta_t rfas;
   cluster_t *clust;
 
-  #ifdef _OPENMP
-  n_clust = 2 * omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
-#else
-  n_clust = 1; // compiled without openMP support (e.g. --disable-openmp)
-  biomcmc_warning ("Program compiled without multithread support");
-#endif
-
   biomcmc_get_time (time0); 
   biomcmc_get_time (time1); 
   arg_parameters params = get_parameters_from_argv (argc, argv);
   if (params.dist->ival[0] < 0) params.dist->ival[0] = 0; 
+
+#ifdef _OPENMP
+  n_clust = omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
+#else
+  n_clust = 1; // compiled without openMP support (e.g. --disable-openmp)
+  biomcmc_warning ("Program compiled without multithread support");
+#endif
+  if (params.pool->ival[0] >= n_clust) n_clust = params.pool->ival[0];
+
   
   if (params.out->count) {
     outlength = strlen (params.out->filename[0]);
@@ -145,7 +157,6 @@ main (int argc, char **argv)
     seq_vec[c] = name_vec[c] = NULL; 
     nchars_vec[c] = 0;
   }
-
  
   del_readfasta (rfas);
   
@@ -171,8 +182,8 @@ main (int argc, char **argv)
 #pragma omp parallel for shared(c, count, clust, seq_vec, name_vec, nchars_vec, time1)
       for (c = 0; c < n_clust; c++) if (seq_vec[c]) {
         check_seq_against_cluster (clust[c], &(seq_vec[c]), &(name_vec[c]), nchars_vec[c]);
-        if (!(++count % print_interval)) {
-          fprintf (stderr, "Pool %3d has %d clusters; %d sequences analysed in total; last %d sequences took %4.4lf secs\n", 
+        if (!(++count % print_interval)) { // FIXME: time1 and count have race condition
+          fprintf (stderr, "Queue %3d has %d clusters; %d sequences analysed in total; last %d sequences took %4.4lf secs\n", 
                    c, clust[c]->n_fs, count, print_interval, biomcmc_update_elapsed_time (time1)); 
           fflush(stderr);
         }
@@ -187,12 +198,30 @@ main (int argc, char **argv)
     fprintf (stderr, "Finished reading file %s in %lf secs\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0)); fflush(stderr);
   }
 
- 
-  for (c = 0; c < n_clust; c++) qsort (clust[c]->fs, clust[c]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
+//#pragma omp parallel for shared(c, clust, j) private (count)
+//  for (c = 0; c < n_clust; c++) {
+//   count = compact_cluster (clust[c]); 
+//    fprintf (stderr, "%d clusters coalesced within queue %d\n", count, c); fflush(stderr);
+//  }
 
-  save_neighbours_to_xz_file (clust, n_clust, outfilename);
+  for (c = n_clust; c > 1; c = (c/2 + c%2)) { // reduce (outside parallel loop)
+#pragma omp parallel for shared(clust, c, j) private(count,i)
+    for (j = 0; j < c/2; j++) {
+      i = j + c/2 + c%2;
+      fprintf (stderr, "Merging queues %d and %d out of %d (%d and %d nonredundant sequences)\n",j,i,c,clust[j]->n_fs, clust[i]->n_fs); fflush(stderr);
+      count = merge_clusters (clust[j], clust[i]); 
+      fprintf (stderr, "%d clusters coalesced between queues %d and %d\n", count, j, i); fflush(stderr);
+    }
+  }
+  count = compact_cluster (clust[0]); 
+  fprintf (stderr, "%d clusters coalesced within final queue\n", count); fflush(stderr);
+
+  //for (c = 0; c < n_clust; c++) qsort (clust[c]->fs, clust[c]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
+  qsort (clust[0]->fs, clust[0]->n_fs, sizeof (fastaseq_t), compare_fastaseq);
+
+  save_neighbours_to_xz_file (clust, 1, outfilename);
   strcpy (outfilename + outlength, ".aln.xz");
-  save_cluster_to_xz_file (clust, n_clust, outfilename);
+  save_cluster_to_xz_file (clust, 1, outfilename);
 
     
   fprintf (stderr, "Finished sorting clusters and saving files in %lf secs\n", biomcmc_update_elapsed_time (time0)); fflush(stderr);
