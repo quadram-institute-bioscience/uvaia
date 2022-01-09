@@ -22,7 +22,7 @@ struct fastaseq_struct
 struct cluster_struct
 {
   fastaseq_t *fs;
-  int n_fs, n_score;
+  int n_fs, n_score, *idx, n_idx;
   double mindist;
   size_t trim, nchars;
   char *reference;
@@ -45,6 +45,7 @@ void update_fasta_seq (fastaseq_t to, char **seq, char **name, size_t nchars, in
 
 cluster_t new_cluster (char *seq, size_t nchars, int mindist, size_t trim, int n_score);
 void del_cluster (cluster_t clus);
+void generate_idx_from_cluster_list (cluster_t *clust, int n_clust, int min_freq);
 void check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t nchars);
 void add_seq_to_cluster (cluster_t clust, int idx, char **seq, char **name, size_t nchars, int *score);
 int merge_clusters (cluster_t clust1, cluster_t clust2); 
@@ -59,5 +60,6 @@ readfasta_t new_readfasta (const char *seqfilename);
 int readfasta_next (readfasta_t rfas);
 void del_readfasta (readfasta_t rfas);
 int accumulate_reference_sequence (char **ref, char *s, size_t nsites);
+int replace_Ns_from_reference (char *ref, size_t nsites);
 
 #endif

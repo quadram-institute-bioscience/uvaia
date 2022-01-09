@@ -10,7 +10,9 @@
 
 int compare_fastaseq (const void *a, const void *b);
 int compare_fastaseq_score (const void *a, const void *b);
-void quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score, int n_score);
+void quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score, int n_score, int *counter);
+void quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score);
+void quick_pairwise_score_truncated_idx (char *s1, char *s2, size_t nsites, int maxdist, int *score, int *idx);
 int quick_count_sequence_non_N (char *s, size_t nsites);
 
 int
@@ -94,13 +96,13 @@ new_cluster (char *seq, size_t nchars, int mindist, size_t trim, int n_score)
   clust->mindist = mindist;
   clust->n_score = n_score;
   clust->trim = trim;
-  if (seq) {
-    clust->reference = (char*) biomcmc_malloc ((nchars+1) * sizeof (char));
-    memcpy (clust->reference, seq, nchars);
-    clust->reference[nchars] = '\0';
-  }
-  else clust->reference = NULL;
+  clust->reference = (char*) biomcmc_malloc ((nchars+1) * sizeof (char));
+  memcpy (clust->reference, seq, nchars);
+  clust->reference[nchars] = '\0';
   clust->nchars = nchars;
+  clust->n_idx = (int) nchars;
+  clust->idx = (int*) biomcmc_malloc (nchars * sizeof (int)); 
+  for (size_t i = 0; i < nchars; i++) clust->idx[i] = 0; // initially holds counts if SNPs wrt ref per site; later will have idx of those
 
   return clust;
 }
@@ -112,14 +114,28 @@ del_cluster (cluster_t clust)
   int i;
   for (i = clust->n_fs-1; i >= 0; i--) del_fastaseq (clust->fs[i]);
   if (clust->reference) free (clust->reference);
+  if (clust->idx) free (clust->idx);
   free (clust);
+  return;
+}
+
+void
+generate_idx_from_cluster_list (cluster_t *clust, int n_clust, int min_freq)
+{
+  int c, i, n_i = 0;
+  if (min_freq < 0) min_freq = 0;
+  for (c = 1; c < n_clust; c++) for (i = 0; i < clust[0]->n_idx; i++) clust[0]->idx[i] += clust[c]->idx[i];
+  for (i = 0; i < clust[0]->n_idx; i++) if (clust[0]->idx[i] > min_freq) clust[0]->idx[n_i++] = i;
+  for (c = 0; c < n_clust; c++) clust[c]->n_idx = n_i;
+  for (c = 0; c < n_clust; c++) clust[c]->idx = (int*) biomcmc_realloc ((int*) clust[c]->idx, (size_t) (n_i) * sizeof (int)); 
+  for (c = 1; c < n_clust; c++) for (i = 0; i < clust[0]->n_idx; i++) clust[c]->idx[i] = clust[0]->idx[i];
   return;
 }
 
 void
 check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t nchars)
 {
-  int i;
+  int i, minloc = 0;
   size_t scorelength = (size_t)(clust->n_score) + 2;
   int *score; // score = {dist to reference, locations of first SNPs w.r.t. ref, number of ACGT (non-N actually)}
 
@@ -129,9 +145,12 @@ check_seq_against_cluster (cluster_t clust, char **seq, char **name, size_t ncha
   score = (int*) biomcmc_malloc (scorelength * sizeof (int));
   upper_kseq (*seq, nchars); // must be _before_ count_sequence
   score[scorelength-1] = quick_count_sequence_non_N (*seq, nchars); // last element of score vector is not touched by quick_pairwise (unless you provide a larger n_score)
-  quick_pairwise_score_truncated (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, nchars/2, score, clust->n_score);
+  quick_pairwise_score_reference (*seq + clust->trim, clust->reference + clust->trim, (int) nchars - 2 * clust->trim, score, clust->n_score, clust->idx);
   for (i = 0; i < clust->n_fs; i++) if (abs(score[0] - clust->fs[i]->score[0]) <= clust->mindist) { // only if within ball ring from reference
-    quick_pairwise_score_truncated (*seq + clust->trim, clust->fs[i]->seq + clust->trim, (int) nchars - 2 * clust->trim, clust->mindist+1, score, 0); // zero -> dont annotate SNP locations
+    if (clust->n_score) minloc = BIOMCMC_MIN (score[1], clust->fs[i]->score[1]) - 1; // location of first disagreement with reference
+    else minloc = 0;
+    if (minloc < 0) minloc = 0;
+    quick_pairwise_score_truncated (*seq + clust->trim + minloc, clust->fs[i]->seq + clust->trim + minloc, (int) nchars - 2 * clust->trim, clust->mindist+1, score);
     if (score[0] <= clust->mindist) { // text matches (hamming distance) (BTW this distance score[0] is not used downstream) 
       if (score[0]) score[scorelength] = 0.;  // seq has SNP wrt current medoid; pretend it's all N so just name (but not sequence) is stored in neighbour list
       add_seq_to_cluster (clust, i, seq, name, nchars, score);
@@ -207,7 +226,7 @@ merge_clusters (cluster_t clust1, cluster_t clust2)
     // c1_n_fs does not change when new clust2 elements are added to clust1 (no need to compare clust2 with itself)
     for (i = first; i < last; i++) if (abs(c2s - clust1->fs[i]->score[0]) <= clust1->mindist) { // only if within ball ring from reference 
       f1 = clust1->fs[i]; f2 = clust2->fs[j]; // nicknames to avoid silly mistakes
-      quick_pairwise_score_truncated (f1->seq + clust1->trim, f2->seq + clust1->trim, (int) (clust1->nchars - 2 * clust1->trim), clust1->mindist+1, score, 0);
+      quick_pairwise_score_truncated_idx (f1->seq + clust1->trim, f2->seq + clust1->trim, clust1->n_idx, clust1->mindist+1, score, clust1->idx);
       if (score[0] <= clust1->mindist) { // medoid will be decided by score[n_score+1] which was already calculated with or without reference
         add_seq_to_cluster (clust1, i, &(f2->seq), &(f2->name), f2->nchars, f2->score);
         if (f2->nn) {
@@ -247,7 +266,7 @@ compact_cluster (cluster_t clust) // not useful
   for (i = 0; i < clust->n_fs-1; i++) for (j = i + 1; j < clust->n_fs; j++) 
     if ((clust->fs[i] && clust->fs[j]) && (abs(clust->fs[i]->score[0] - clust->fs[j]->score[0]) <= clust->mindist)) { // only if within ball ring from reference 
     f1 = clust->fs[i]; f2 = clust->fs[j];
-    quick_pairwise_score_truncated (f1->seq + clust->trim, f2->seq + clust->trim, (int) (clust->nchars - 2 * clust->trim), clust->mindist+1, score, 0);
+    quick_pairwise_score_truncated (f1->seq + clust->trim, f2->seq + clust->trim, (int) (clust->nchars - 2 * clust->trim), clust->mindist+1, score);
     if (score[0] <= clust->mindist) { 
       add_seq_to_cluster (clust, i, &(f2->seq), &(f2->name), f2->nchars, f2->score);
       if (f2->nn) {
@@ -487,20 +506,51 @@ accumulate_reference_sequence (char **ref, char *s, size_t nsites)
   return count;
 }
 
+int
+replace_Ns_from_reference (char *ref, size_t nsites)
+{
+  int count = 0;
+  for (size_t i = 0; i < nsites; i++) if (ref[i] == 'N') { ref[i] = 'A'; count++; }
+  return count;
+}
 
 void
-quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score, int n_score)
-{ // assumes upper(), and just count text matches; optionally stores location of first n_score differences
+quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score, int n_score, int *counter)
+{ // assumes upper(), and just count text matches; adds non-N to idx 
   int i;
   score[0] = 0;
   for (i = 1; i <= n_score; i++) score[i] = -1; 
+
+  for (i=0; i < nsites; i++) {
+    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
+    score[0]++;
+    if (s1[i] == s2[i]) score[0]--;
+    else counter[i]++; // SNP wrt reference (i.e. valid pair, which disagrees
+    if ((n_score) && (score[0]) && (score[0] <= n_score) && (score[score[0]] < 0)) score[ score[0] ] = i; // n-th difference between s1 and s2
+  }
+  return;
+}
+
+void
+quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score)
+{ // assumes upper(), and just count text matches;
+  int i;
+  score[0] = 0;
 
   for (i=0; (i < nsites) && (score[0] < maxdist); i++) {
     if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
     score[0]++;
     if (s1[i] == s2[i]) score[0]--;
-    if ((n_score) && (score[0]) && (score[0] <= n_score) && (score[score[0]] < 0)) score[ score[0] ] = i; // n-th difference between s1 and s2
   }
+  return;
+}
+
+void
+quick_pairwise_score_truncated_idx (char *s1, char *s2, size_t nsites, int maxdist, int *score, int *idx)
+{ // assumes upper(), and just count text matches;
+  size_t i;
+  *score = 0;
+  for (i=0; (i < nsites) && (score[0] < maxdist); i++) if (s1[ idx[i] ] != s2[ idx[i] ]) (*score)++;
   return;
 }
 

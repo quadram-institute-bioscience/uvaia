@@ -157,8 +157,10 @@ main (int argc, char **argv)
         biomcmc_error ("Sequences should be aligned; first sequence has %d sites but sequence %s has %lu sites\n", j, rfas->name, rfas->seqlength);
       count = accumulate_reference_sequence (&refseq, rfas->seq, rfas->seqlength); // merging of ACGT sites
     }
-    fprintf (stderr, "Generating a reference from first 512 sequences or less in %s\n", params.fasta->filename[0]); 
+    fprintf (stderr, "Generating a reference from first 512 sequences or less in %s\n", params.fasta->filename[0]);
   }
+  count = replace_Ns_from_reference (refseq, rfas->seqlength);
+  if (count) fprintf (stderr, "Reference still had %d Ns or indels which were replaced arbitrarily (it only makes program a bit slower).", count);
   
   if (params.trim->ival[0] > 0) trim = (size_t) params.trim->ival[0];
   if (trim > rfas->seqlength / 2.1) trim = rfas->seqlength / 2.1; // if we trim more than 1/2 the genome there's nothing left
@@ -178,7 +180,7 @@ main (int argc, char **argv)
   del_readfasta (rfas);
   if (refseq) free (refseq);
   
-  /* 2. read alignment files (can be several) */
+  /* 2. read alignment files (can be several) and fill pool of cluster queues */
   count = 0;
   for (j = 0; j < params.fasta->count; j++) {
     rfas = new_readfasta (params.fasta->filename[j]);
@@ -223,11 +225,16 @@ main (int argc, char **argv)
     fprintf (stderr, "Finished reading file %s in %.3lf secs; Commulative %d sequences read\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time0), count); fflush(stderr);
   }  // for fasta file
 
+  /* 2.1 create vector of SNP locations wrt reference */
+  generate_idx_from_cluster_list (clust, n_clust, 0);
+
 //#pragma omp parallel for shared(c, clust, j) private (count)
 //  for (c = 0; c < n_clust; c++) {
 //   count = compact_cluster (clust[c]);  // does not improve at all (zero coalescences)
 //    fprintf (stderr, "%d clusters coalesced within queue %d\n", count, c); fflush(stderr);
 //  }
+
+  /* 3. merge clusters */
 
   elapsed = biomcmc_update_elapsed_time (time1); // time1 is more finegrained than time0 
   for (c = n_clust; c > 1; c = (c/2 + c%2)) { // reduce (outside parallel loop)
