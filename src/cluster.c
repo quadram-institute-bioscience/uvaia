@@ -146,7 +146,7 @@ main (int argc, char **argv)
     rfas = new_readfasta (params.ref->filename[0]);
     refseq = rfas->seq;
     readfasta_next (rfas);
-    fprintf (stderr, "Reading first sequence from %s as reference\n", params.fasta->filename[0]); 
+    fprintf (stderr, "Reading first sequence from %s as reference\n", params.ref->filename[0]); 
   }
   else {
     rfas = new_readfasta (params.fasta->filename[0]);
