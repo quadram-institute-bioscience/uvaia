@@ -144,9 +144,9 @@ main (int argc, char **argv)
   /* 1. read reference sequence. If missing, use database to create a dummy sequence (composed of ACGT) */
   if (params.ref->count) {
     rfas = new_readfasta (params.ref->filename[0]);
-    refseq = rfas->seq;
     readfasta_next (rfas);
-    fprintf (stderr, "Reading first sequence from %s as reference\n", params.ref->filename[0]); 
+    refseq = rfas->seq;
+    fprintf (stderr, "Reading first sequence from %s as reference:\n  %s", params.ref->filename[0], rfas->name); 
   }
   else {
     rfas = new_readfasta (params.fasta->filename[0]);
