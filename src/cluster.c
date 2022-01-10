@@ -177,8 +177,8 @@ main (int argc, char **argv)
     nchars_vec[c] = 0;
   }
  
-  del_readfasta (rfas);
   if (refseq) free (refseq);
+  del_readfasta (rfas);
   
   /* 2. read alignment files (can be several) and fill pool of cluster queues */
   count = 0;
