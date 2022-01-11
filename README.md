@@ -57,13 +57,24 @@ Here is an example of its installation, please modify accordingly.
 /home/simpson/$ git clone --recursive git@github.com:quadram-institute-bioscience/uvaia.git
 /home/simpson/$ cd uvaia && ./autogen.sh
 /home/simpson/$ mkdir build && cd build
-/home/simpson/$ ../uvaia/configure --prefix=${HOME}/local
+/home/simpson/$ ../configure --prefix=${HOME}/local
 /home/simpson/$ make; make install
 /home/simpson/$ make check  # battery of unit and integration tests, not mandatory
 ```
 Remember that the installation and `autogen.sh` in particular modify/add local files; therefore updating the repository
 from github will complain about uncommited changes. You can run `git stash` (or reinstall from scratch) before `git pull`.
 check the directory [recipe](recipe/) for having a better idea of how conda/docker install it. 
+
+If the compilation is unsuccessful, you can check if all libraries and packages below are installed:
+```[bash]
+## packages necessary for autotools (o.w. it will complain when you run "autogen.sh" : 
+/home/simpson/$ apt-get install pkg-config autotools-dev autoconf automake libtool
+/home/simpson/$ (cd tatajuba && autoreconf)  ## the parentheses avoid entering the directory afterwards
+## C libraries needed or suggested by uvaia : 
+/home/simpson/$ apt-get install zlib1g-dev libomp-dev libbz2-dev check liblzma-dev
+/home/simpson/$ (cd build && ../configure)  ## etc.  
+```
+
 ## Running
 
 The two main programs are:
