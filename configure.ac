@@ -45,10 +45,10 @@ PKG_CHECK_MODULES([ZLIB], [zlib],
                   )
 PKG_CHECK_MODULES([LZMA], [liblzma],
                   AC_DEFINE([HAVE_LZMA],[1],[set to one if xz compression library found]),
-                  [AC_MSG_NOTICE([optional lzma headers not found])]   )
+                  [AC_MSG_NOTICE([optional lzma headers not found, you can install it as "liblzma-dev" in linux, "xz" in conda])]   )
 AC_CHECK_HEADER(bzlib.h,
                   AC_DEFINE([HAVE_BZIP2],[1],[set to one if bz2 compression library found]),
-                  [AC_MSG_NOTICE([optional bzip2 headers not found])]  )
+                  [AC_MSG_NOTICE([optional bzip2 headers not found, you can install as "libbz2-dev" in linux, "bzip2" in conda])]  )
 AC_SEARCH_LIBS([BZ2_bzlibVersion], [bz2]) #  unlike AC_CHECK_LIB, does not define HAVE_LIBBZ2 (thus our custom define above)
 
 dnl a few checks below that are needed by biomcmc 
