@@ -3,6 +3,7 @@
 #include "fastaseq.h"
 
 typedef struct queue_struct* queue_t;
+typedef struct query_struct* query_t;
 
 typedef struct
 {
@@ -24,6 +25,14 @@ struct queue_struct
   int dist, n_seqs, *mindist;
   size_t trim;
   char **seq, **name; // should have a mindist for query seqs, for each element of queue to avoid race conditions
+};
+
+struct query_struct
+{
+  alignment aln;
+  char *consensus;
+  size_t *idx_c, *idx;
+  int n_idx_c, n_idx;
 };
 
 arg_parameters get_parameters_from_argv (int argc, char **argv);
