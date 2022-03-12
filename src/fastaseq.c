@@ -14,6 +14,7 @@ int compare_fastaseq_score (const void *a, const void *b);
 void quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score, int n_score, int *counter);
 void quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score);
 void quick_pairwise_score_truncated_idx (char *s1, char *s2, size_t nsites, int maxdist, int *score, int *idx);
+void quick_pairwise_score_truncated_idx_indelcheck (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx);
 int quick_count_sequence_non_N (char *s, size_t nsites);
 
 int
@@ -534,7 +535,7 @@ quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score, int 
 
 void
 quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score)
-{ // assumes upper(), and just count text matches; "score" actually means distance (the lower the better)
+{ // assumes upper(), and just count text matches; "score" actually means distance (the lower the better); skips indels
   int i;
   score[0] = 0;
 
@@ -555,6 +556,20 @@ quick_pairwise_score_truncated_idx (char *s1, char *s2, size_t nsites, int maxdi
   return;
 }
 
+void
+quick_pairwise_score_truncated_idx_indelcheck (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx)
+{ // assumes upper(), and just count text matches; unlike above, checks for indels
+  size_t i, j;
+  score[0] = 0;
+  for (j=0; (j < nsites) && (score[0] < maxdist); j++) {
+    i = idx[j];
+    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
+    score[0]++;
+    if (s1[i] == s2[i]) score[0]--;
+  }
+  return;
+}
+
 int
 quick_count_sequence_non_N (char *s, size_t nsites)
 {
@@ -566,13 +581,16 @@ quick_count_sequence_non_N (char *s, size_t nsites)
 /* uvaia_ball */ 
 
 void
-seq_ball_against_alignment (char **seq, int *min_dist, int ball_radius, size_t trim, alignment query)
+seq_ball_against_query_structure (char **seq, int *min_dist, int ball_radius, query_t qu)
 {
-  int i;
-  for (i = 0; (i < query->ntax) && (*min_dist >= ball_radius); i++) { 
-    quick_pairwise_score_truncated (*seq + trim, query->character->string[i] + trim, query->nchar - 2 * trim, ball_radius, min_dist);
+  int i, c_dist=0;
+  quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->consensus, qu->n_idx_c, ball_radius, min_dist, qu->idx_c);
+  if (*min_dist >= ball_radius) return;
+  c_dist = *min_dist;
+  for (i = 0; (i < qu->aln->ntax) && ((*min_dist + c_dist) >= ball_radius); i++) { 
+    quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->aln->character->string[i], qu->n_idx, ball_radius - c_dist, min_dist, qu->idx);
   }
-//  printf ("DEBUG:: %6d | %6d\n", *min_dist, i);
+  *min_dist += c_dist;
 }
 
 query_t
@@ -608,4 +626,32 @@ del_query_structure (query_t qu)
   del_alignment (qu->aln);
   free (qu);
 }
+
+void
+create_query_indices (query_t qu)
+{
+  int i,j;
+  char s2;
+
+  qu->consensus = (char*) biomcmc_malloc (qu->aln->nchar * sizeof (char));
+  for (i = 0; i < qu->aln->nchar; i++) qu->consensus[i] = 'N';
+  for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
+    s2 = qu->aln->character->string[j][i];
+    if ( (s2 == 'N') || (s2 == '-') || (s2 == '?')) continue; // skip this column
+    if (qu->consensus[i] == 'N') qu->consensus[i] = s2; // consensus is missing info, will receive wathever state is from alignment
+    else if (qu->consensus[i] != s2) qu->consensus[i] = '#';
+  }
+
+  qu->idx_c = (size_t*) biomcmc_malloc ((qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
+  qu->idx   = (size_t*) biomcmc_malloc ((qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
+  qu->n_idx_c = qu->n_idx = 0;
+  
+  for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) if (qu->consensus[i] != 'N') {
+    if (qu->consensus[i] == '#') qu->idx[qu->n_idx++] = i; // polymorphic site; we need to check every alignment sequence
+    else                     qu->idx_c[qu->n_idx_c++] = i; // non-segregating site; enough to compare with consensus
+  }
+  qu->idx_c = (size_t*) biomcmc_realloc ((size_t*)qu->idx_c, qu->n_idx_c * sizeof (size_t)); 
+  qu->idx   = (size_t*) biomcmc_realloc ((size_t*)qu->idx, qu->n_idx * sizeof (size_t)); 
+}
+
 

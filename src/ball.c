@@ -135,7 +135,7 @@ main (int argc, char **argv)
   biomcmc_warning ("Program compiled without multithread support");
 #endif
   if (params.pool->ival[0] >= n_clust) n_clust = params.pool->ival[0];
-  fprintf (stderr, "Creating a queue of %d sequences; radius distance is %d\n", n_clust,params.dist->ival[0]); 
+  fprintf (stderr, "Creating a queue of %d sequences; radius distance is %d (refs more distant than this are excluded)\n", n_clust,params.dist->ival[0]); 
   fflush(stderr);
   
   if (params.out->count) outfilename = get_outfile_prefix (params.out->filename[0], &outlength); // outfilename already has "aln.xz" suffix
@@ -150,6 +150,9 @@ main (int argc, char **argv)
   if (query->aln->ntax < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.fasta->filename[0]);
   biomcmc_get_time (time1); // starts counting here (since we'll have a total time0 and a within-loop time1 chronometer 
 
+  /* 1.1 create indices of polymorphic and monomorphic sites, skipping indels and Ns */
+  create_query_indices (query);
+  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons)\n", query->n_idx, query->n_idx_c); fflush(stderr);
   /* 1.2 several ref sequences per thread (i.e. total n_clust read at once, distributed over threads), with char pointers etc*/
   cq = new_queue (n_clust, query->dist, query->trim); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
@@ -184,8 +187,8 @@ main (int argc, char **argv)
       } // single thread for() loop
 
 #pragma omp parallel for shared(c, count, cq)
-      for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) {
-        seq_ball_against_alignment (&(cq->seq[c]), &(cq->mindist[c]), cq->dist, cq->trim, query->aln);
+      for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // dist can never be more than (cq->dist+1) and we want to distinghuish dist 0 and 1 
+        seq_ball_against_query_structure (&(cq->seq[c]), &(cq->mindist[c]), cq->dist + 1, query);
       }
 
       if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
@@ -196,7 +199,7 @@ main (int argc, char **argv)
 
 #pragma omp single
       for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // last round may have fewer sequences than n_seqs
-        if (cq->mindist[c] < cq->dist) {
+        if (cq->mindist[c] <= cq->dist) { // if cq->dist is zero then we only want "identical" seqs
           n_output++;
           save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->aln->nchar, cq->name[c], strlen (cq->name[c]));
         }

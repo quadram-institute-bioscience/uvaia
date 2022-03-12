@@ -72,7 +72,8 @@ int accumulate_reference_sequence (char **ref, char *s, size_t nsites);
 int replace_Ns_from_reference (char *ref, size_t nsites);
 
 /* for uvaia_ball */
-void seq_ball_against_alignment (char **seq, int *min_dist, int ball_radius, size_t trim, alignment query);
+void seq_ball_against_query_structure (char **seq, int *min_dist, int ball_radius, query_t qu);
 query_t new_query_structure_from_fasta (char *filename, int trim, int dist);
 void del_query_structure (query_t qu);
+void create_query_indices (query_t qu);
 #endif
