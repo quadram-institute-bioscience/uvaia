@@ -3,7 +3,6 @@
 #include "fastaseq.h"
 
 typedef struct queue_struct* queue_t;
-typedef struct query_struct* query_t;
 
 typedef struct
 {
@@ -25,14 +24,6 @@ struct queue_struct
   int dist, n_seqs, *mindist;
   size_t trim;
   char **seq, **name; // should have a mindist for query seqs, for each element of queue to avoid race conditions
-};
-
-struct query_struct
-{
-  alignment aln;
-  char *consensus;
-  size_t *idx_c, *idx;
-  int n_idx_c, n_idx;
 };
 
 arg_parameters get_parameters_from_argv (int argc, char **argv);
@@ -125,9 +116,9 @@ main (int argc, char **argv)
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
-  size_t trim, outlength = 0;
+  size_t outlength = 0;
   char *outfilename = NULL;
-  alignment query;  // all query sequences in memory 
+  query_t query;  // all query sequences in memory 
   readfasta_t rfas; // single fasta sequence (for queue of ref seqs)
   queue_t cq;       // queue of ref sequences
   file_compress_t outstream;
@@ -146,30 +137,21 @@ main (int argc, char **argv)
   if (params.pool->ival[0] >= n_clust) n_clust = params.pool->ival[0];
   fprintf (stderr, "Creating a queue of %d sequences; radius distance is %d\n", n_clust,params.dist->ival[0]); 
   fflush(stderr);
-
   
   if (params.out->count) outfilename = get_outfile_prefix (params.out->filename[0], &outlength); // outfilename already has "aln.xz" suffix
   else                   outfilename = get_outfile_prefix ("ball_uvaia", &outlength);
 
   /* 1. read query sequences into char_vectors */
-  query = read_fasta_alignment_from_file ((char*)params.fasta->filename[0], 0xf); // 0xf -> neither true or false, but gets only bare alignment info
+  query = new_query_structure_from_fasta ((char*)params.fasta->filename[0], params.trim->ival[0], params.dist->ival[0]);
 
-
-  /* 1.1 check if parameters (trim, min_dist) are compatible with sequence lenght */
-  if (params.trim->ival[0] <= 0) trim = 0; // lower bound is zero (default value); params.trim is an int but we need size_t (cq->trim)
-  else trim = (size_t) params.trim->ival[0];
-  if (trim > query->nchar / 2.1) trim = query->nchar / 2.1; // if we trim more than 1/2 the genome there's nothing left
-  if (params.dist->ival[0] < 0) params.dist->ival[0] = 0; 
-  if (params.dist->ival[0] > (query->nchar - 2 * (int)(trim))/10) params.dist->ival[0] = (int)((query->nchar - 2*(int)(trim))/10); 
-
-  fprintf (stderr, "Finished reading %d query references in %lf secs;\n", query->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
-  uvaia_keep_only_valid_sequences (query, params.ambig->dval[0], true); // true -> check if seqs are aligned, exiting o.w.
-  fprintf (stderr, "Final query database composed of  %d valid references (after excluding low quality).\n", query->ntax); fflush(stderr);
-  if (query->ntax < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.fasta->filename[0]);
+  fprintf (stderr, "Finished reading %d query references in %lf secs;\n", query->aln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
+  uvaia_keep_only_valid_sequences (query->aln, params.ambig->dval[0], true); // true -> check if seqs are aligned, exiting o.w.
+  fprintf (stderr, "Final query database composed of  %d valid references (after excluding low quality).\n", query->aln->ntax); fflush(stderr);
+  if (query->aln->ntax < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.fasta->filename[0]);
   biomcmc_get_time (time1); // starts counting here (since we'll have a total time0 and a within-loop time1 chronometer 
 
   /* 1.2 several ref sequences per thread (i.e. total n_clust read at once, distributed over threads), with char pointers etc*/
-  cq = new_queue (n_clust, params.dist->ival[0], trim);
+  cq = new_queue (n_clust, query->dist, query->trim); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
   outstream = biomcmc_open_compress (outfilename, "w");
  
@@ -182,15 +164,15 @@ main (int argc, char **argv)
     while (!end_of_file) {
 #pragma omp single
       for (c = 0; c < n_clust; c++) { // reads n_clust sequences
+        cq->mindist[c] = 0xffffff;
         if (readfasta_next (rfas) >= 0) {
           count++;
           cq->seq[c] = rfas->seq; rfas->seq = NULL;
           cq->name[c] = rfas->name; rfas->name = NULL;
-          cq->mindist[c] = 0xffff;
-          if (rfas->seqlength != (size_t) query->nchar) {
-            biomcmc_warning ("Reference sequence '%s' has %d sites but query sequences have %d sites\n", cq->name[c], rfas->seqlength, query->nchar);
+          if (rfas->seqlength != (size_t) query->aln->nchar) {
+            biomcmc_warning ("Reference sequence '%s' has %d sites but query sequences have %d sites\n", cq->name[c], rfas->seqlength, query->aln->nchar);
             del_queue (cq);
-            del_alignment (query);
+            del_query_structure (query);
             del_readfasta (rfas);
             biomcmc_error ("all sequences must be aligned");
           }
@@ -203,7 +185,7 @@ main (int argc, char **argv)
 
 #pragma omp parallel for shared(c, count, cq)
       for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) {
-        seq_ball_against_alignment (&(cq->seq[c]), &(cq->mindist[c]), cq->dist, cq->trim, query);
+        seq_ball_against_alignment (&(cq->seq[c]), &(cq->mindist[c]), cq->dist, cq->trim, query->aln);
       }
 
       if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
@@ -216,7 +198,7 @@ main (int argc, char **argv)
       for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // last round may have fewer sequences than n_seqs
         if (cq->mindist[c] < cq->dist) {
           n_output++;
-          save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->nchar, cq->name[c], strlen (cq->name[c]));
+          save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->aln->nchar, cq->name[c], strlen (cq->name[c]));
         }
       }
     } // while not end of file
@@ -226,6 +208,8 @@ main (int argc, char **argv)
              params.ref->filename[j], biomcmc_update_elapsed_time (time0), count, n_output); 
     fflush (stderr);
   }  // for fasta file
+  
+  fprintf (stderr, "Saved %d sequences to file %s\n", n_output, outstream->filename); 
 
   /* everybody is free to feel good */
   biomcmc_close_compress (outstream);
@@ -260,7 +244,7 @@ new_queue (int n_seqs, int dist, size_t trim)
   cq->seq    = (char**) biomcmc_malloc (n_seqs * sizeof (char*)); // only pointer, actual seq is allocated by readfasta
   cq->name   = (char**) biomcmc_malloc (n_seqs * sizeof (char*)); // only pointer '' '' ''
   cq->mindist = (int*)  biomcmc_malloc (n_seqs * sizeof (int*));
-  for (c = 0; c < n_seqs; c++) { cq->seq[c] = cq->name[c] = NULL; cq->mindist[c] = 0xffff; }
+  for (c = 0; c < n_seqs; c++) { cq->seq[c] = cq->name[c] = NULL; cq->mindist[c] = 0xffffff; }
   return cq;
 }
 

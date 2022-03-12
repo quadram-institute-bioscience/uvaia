@@ -11,6 +11,7 @@
 typedef struct fastaseq_struct* fastaseq_t;
 typedef struct cluster_struct* cluster_t;
 typedef struct readfasta_struct* readfasta_t;
+typedef struct query_struct* query_t;
 
 struct fastaseq_struct
 {
@@ -35,6 +36,14 @@ struct readfasta_struct
   char *name, *seq; /*! \brief sequence and header */
   size_t linelength, seqlength;
   bool newseq;
+};
+
+struct query_struct
+{
+  alignment aln;
+  char *consensus;
+  size_t *idx_c, *idx, trim;
+  int n_idx_c, n_idx, dist;
 };
 
 int compare_fastaseq (const void *a, const void *b); /* \brief more neighours first, compare_score() if tie */
@@ -64,4 +73,6 @@ int replace_Ns_from_reference (char *ref, size_t nsites);
 
 /* for uvaia_ball */
 void seq_ball_against_alignment (char **seq, int *min_dist, int ball_radius, size_t trim, alignment query);
+query_t new_query_structure_from_fasta (char *filename, int trim, int dist);
+void del_query_structure (query_t qu);
 #endif

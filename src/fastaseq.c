@@ -8,6 +8,7 @@
 
 #include "fastaseq.h"
 
+
 int compare_fastaseq (const void *a, const void *b);
 int compare_fastaseq_score (const void *a, const void *b);
 void quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score, int n_score, int *counter);
@@ -568,8 +569,43 @@ void
 seq_ball_against_alignment (char **seq, int *min_dist, int ball_radius, size_t trim, alignment query)
 {
   int i;
-  for (i = 0; (i < query->ntax) && (*min_dist >= ball_radius); i++) 
+  for (i = 0; (i < query->ntax) && (*min_dist >= ball_radius); i++) { 
     quick_pairwise_score_truncated (*seq + trim, query->character->string[i] + trim, query->nchar - 2 * trim, ball_radius, min_dist);
+  }
+//  printf ("DEBUG:: %6d | %6d\n", *min_dist, i);
 }
 
+query_t
+new_query_structure_from_fasta (char *filename, int trim, int dist)
+{
+ query_t qu = (query_t) biomcmc_malloc (sizeof (struct query_struct));
+  qu->consensus = NULL;
+  qu->idx_c = qu->idx = NULL;
+  qu->n_idx_c = qu->n_idx = 0;
+ 
+  qu->aln = read_fasta_alignment_from_file (filename, 0xf); // 0xf -> neither true or false, but gets only bare alignment info
+  //int i,j;
+  //for (i=0;i<30;i++) {for (j=0;j<30;j++) printf("%c",qu->aln->character->string[i][j]); printf ("\n"); }
+  
+  /* check if parameters (trim, min_dist) are compatible with sequence lenght */
+  if (trim < 0) trim = 0; // lower bound is zero (default value); params.trim is an int but we need size_t (cq->trim)
+  if (trim > qu->aln->nchar / 2.1) trim = qu->aln->nchar / 2.1; // if we trim more than 1/2 the genome there's nothing left
+  qu->trim = (size_t) trim;
+  if (dist < 0) dist = 0;
+  if (dist > (qu->aln->nchar - 2 * trim)/10) dist = (int)((qu->aln->nchar - 2*trim)/10); 
+  qu->dist = dist;
+
+  return qu;
+}
+
+void
+del_query_structure (query_t qu)
+{
+  if (!qu) return;
+  if (qu->consensus) free (qu->consensus);
+  if (qu->idx_c) free (qu->idx_c);
+  if (qu->idx) free (qu->idx);
+  del_alignment (qu->aln);
+  free (qu);
+}
 
