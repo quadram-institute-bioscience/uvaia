@@ -533,7 +533,7 @@ quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score, int 
 
 void
 quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score)
-{ // assumes upper(), and just count text matches;
+{ // assumes upper(), and just count text matches; "score" actually means distance (the lower the better)
   int i;
   score[0] = 0;
 
@@ -561,4 +561,15 @@ quick_count_sequence_non_N (char *s, size_t nsites)
   for (size_t i = 0; i < nsites; i++) if ((s[i] == 'N') || (s[i] == '-') || (s[i] == '?') || (s[i] == 'X') || (s[i] == 'O') || (s[i] == '.')) non_n--;
   return non_n;
 }
+
+/* uvaia_ball */ 
+
+void
+seq_ball_against_alignment (char **seq, int *min_dist, int ball_radius, size_t trim, alignment query)
+{
+  int i;
+  for (i = 0; (i < query->ntax) && (*min_dist >= ball_radius); i++) 
+    quick_pairwise_score_truncated (*seq + trim, query->character->string[i] + trim, query->nchar - 2 * trim, ball_radius, min_dist);
+}
+
 

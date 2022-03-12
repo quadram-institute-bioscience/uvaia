@@ -62,4 +62,6 @@ void del_readfasta (readfasta_t rfas);
 int accumulate_reference_sequence (char **ref, char *s, size_t nsites);
 int replace_Ns_from_reference (char *ref, size_t nsites);
 
+/* for uvaia_ball */
+void seq_ball_against_alignment (char **seq, int *min_dist, int ball_radius, size_t trim, alignment query);
 #endif
