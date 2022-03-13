@@ -12,9 +12,12 @@ Uvaia is a program for pairwise reference-based alignment, and subsequent search
 The alignment uses the promising [WFA library](https://github.com/smarco/WFA) implemented by Santiago Marco-Sola, and
 the database search is based on score distances from my 
 [biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib) library.
-It also uses the [kseq.h](https://github.com/lh3/seqtk) library, by Heng Li, for reading fasta files.
+In the past it used the [kseq.h](https://github.com/lh3/seqtk) library, by Heng Li, for reading fasta files, but
+currently it relies on general compression libraries available on 
+[biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib).
+In particular I am trying to make all functions work with XZ compressed files.
 
-Uvaia has been developed to help with  SARS-CoV-2 analysis, and is been used as a quick replacement for [civet](https://github.com/COG-UK/civet).
+Uvaia has been developed to help with SARS-CoV-2 analysis, and is been used as a quick replacement for [civet](https://github.com/COG-UK/civet).
 
 
 #### Etymology
