@@ -142,6 +142,7 @@ config.status
 config.sub
 configure
 configure~
+configure.ac~
 depcomp
 missing
 ltmain.sh
