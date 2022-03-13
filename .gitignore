@@ -152,3 +152,5 @@ Makefile
 src/Makefile
 include/Makefile
 .deps
+ar-lib
+test-driver
