@@ -164,8 +164,10 @@ main (int argc, char **argv)
 
   /* 1.1 create indices of polymorphic and monomorphic sites, skipping indels and Ns */
   create_query_indices (query);
-  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons); starting main comparison (this may take a while)\n", 
-           query->n_idx, query->n_idx_c); fflush(stderr);
+  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons) ", query->n_idx, query->n_idx_c); 
+  if (qu->acgt) fprintf (stderr, "by focusing on ACGT differences only. Next step is main comparison, whic may take a while\n"); 
+  else fprintf (stderr, "by focusing on text match (excluding only indels and Ns). Next step is main comparison, which may take a while\n"); 
+  fflush(stderr);
   /* 1.2 several ref sequences per thread (i.e. total n_clust read at once, distributed over threads), with char pointers etc*/
   cq = new_queue (n_clust, query->dist, query->trim); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
