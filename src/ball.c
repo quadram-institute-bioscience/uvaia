@@ -186,7 +186,9 @@ main (int argc, char **argv)
         if (readfasta_next (rfas) >= 0) {
           count++;
           if (quick_count_sequence_non_N (rfas->seq, rfas->seqlength) < non_n_ref) {
-            cq->seq[c] = cq->name[c] = NULL;
+            if (rfas->seq) free (rfas->seq);
+            if (rfas->name) free (rfas->name);
+            rfas->seq = rfas->name = cq->seq[c] = cq->name[c] = NULL;
             c--; n_invalid++; // try again this vector element
             continue; // skip to next (c<n_clust) for iteration
           }
@@ -217,6 +219,10 @@ main (int argc, char **argv)
           n_output++;
           save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->aln->nchar, cq->name[c], strlen (cq->name[c]));
         }
+      }
+      for (c = 0; c < cq->n_seqs; c++) { // not used anymore, must be freed by hand here o.w. we have dangling pointers
+        if (cq->seq[c]) free (cq->seq[c]);
+        if (cq->name[c]) free (cq->name[c]);
       }
 
       if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
