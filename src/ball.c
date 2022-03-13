@@ -8,9 +8,11 @@ typedef struct
 {
   struct arg_lit  *help;
   struct arg_lit  *version;
+  struct arg_lit  *acgt;
   struct arg_int  *dist;
   struct arg_int  *trim;
-  struct arg_dbl  *ambig;
+  struct arg_dbl  *ambig_q;
+  struct arg_dbl  *ambig_r;
   struct arg_int  *pool;
   struct arg_file *ref;
   struct arg_file *fasta;
@@ -42,24 +44,27 @@ get_parameters_from_argv (int argc, char **argv)
   arg_parameters params = {
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
+    .acgt    = arg_litn("x","acgt",0, 1, "considers only ACGT sites (i.e. unambiguous SNP differences), more permissive and faster"),
     .dist    = arg_intn("d","distance", NULL, 0, 1, "ball radius, i.e. refs within this distance to any query seq are kept"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
-    .ambig   = arg_dbl0("a","ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded, since we don't care here about reference ambiguity (default=0.5)"),
-    .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. how many reference seqs are queued to be processed in parallel (can be much larger than avail threads, defaults to 100)"),
+    .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
+    .ambig_r = arg_dbl0("A","ref_ambiguity", NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
+    .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. how many reference seqs are queued to be processed in parallel (usually larger than avail threads, defaults to 4 per thread)"),
     .ref     = arg_filen("r","reference", "<ref.fa(.gz,.xz)>", 1, 1024, "aligned reference sequences (can be several files)"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa(.gz,.xz)>", 1, 1, "aligned query sequences"),
     .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment with subset of ref sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.dist, params.trim, params.ambig, params.pool, params.ref, params.fasta, params.out, params.end};
+  void* argtable[] = {params.help, params.version, params.acgt, params.dist, params.trim, params.ambig_r, params.ambig_q, params.pool, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.dist->ival[0] = 5;
   params.trim->ival[0] = 0;
-  params.ambig->dval[0] = 0.5;
+  params.ambig_r->dval[0] = 0.5;
+  params.ambig_q->dval[0] = 0.5;
 #ifdef _OPENMP
-  params.pool->ival[0] = 100 * omp_get_max_threads (); // default is to have quite a few
+  params.pool->ival[0] = 4 * omp_get_max_threads (); // default is to have quite a few
 #else
-  params.pool->ival[0] = 100;
+  params.pool->ival[0] = 4;
 #endif 
 
   /* actual parsing: */
@@ -74,9 +79,11 @@ del_arg_parameters (arg_parameters params)
 {
   if (params.help)  free (params.help);
   if (params.version) free (params.version);
+  if (params.acgt)  free (params.acgt);
   if (params.dist)  free (params.dist);
   if (params.trim) free (params.trim);
-  if (params.ambig) free (params.ambig);
+  if (params.ambig_q) free (params.ambig_q);
+  if (params.ambig_r) free (params.ambig_r);
   if (params.pool) free (params.pool);
   if (params.ref)   free (params.ref);
   if (params.fasta) free (params.fasta);
@@ -102,6 +109,9 @@ print_usage (arg_parameters params, char *progname)
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
   if (params.help->count) {
     printf ("experimental algorithm; if radius smaller than closest neighour to a sequence, then this sequence will have no neighbours!\n\n");
+    printf ("Default distance calculation is just number of char matches (e.g. A<->M are distinct chars although biologically compatible). ");
+    printf ("However, option `--acgt` (or `-x`) neglects partially ambiguous and considers a distance only if the ACGT SNPs disagree. This may be faster but prune less sequences.\n\n");
+    printf ("The suggested usage is to be permissive here (large radius of 5 or 10) and then use `uvaia` for more fine-grained neighbour match.\n\n");
   }
 
   del_arg_parameters (params);
@@ -112,7 +122,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
+  int j, c, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 10000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
@@ -125,8 +135,10 @@ main (int argc, char **argv)
 
   biomcmc_get_time (time0); 
   arg_parameters params = get_parameters_from_argv (argc, argv);
-  if (params.ambig->dval[0] < 0.001) params.ambig->dval[0] = 0.001;
-  if (params.ambig->dval[0] > 1.)    params.ambig->dval[0] = 1.;
+  if (params.ambig_q->dval[0] < 0.001) params.ambig_q->dval[0] = 0.001;
+  if (params.ambig_q->dval[0] > 1.)    params.ambig_q->dval[0] = 1.;
+  if (params.ambig_r->dval[0] < 0.001) params.ambig_r->dval[0] = 0.001;
+  if (params.ambig_r->dval[0] > 1.)    params.ambig_r->dval[0] = 1.;
 
 #ifdef _OPENMP
   n_clust = omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
@@ -142,24 +154,27 @@ main (int argc, char **argv)
   else                   outfilename = get_outfile_prefix ("ball_uvaia", &outlength);
 
   /* 1. read query sequences into char_vectors */
-  query = new_query_structure_from_fasta ((char*)params.fasta->filename[0], params.trim->ival[0], params.dist->ival[0]);
+  query = new_query_structure_from_fasta ((char*)params.fasta->filename[0], params.trim->ival[0], params.dist->ival[0], params.acgt->count);
 
   fprintf (stderr, "Finished reading %d query references in %lf secs;\n", query->aln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
-  uvaia_keep_only_valid_sequences (query->aln, params.ambig->dval[0], true); // true -> check if seqs are aligned, exiting o.w.
+  uvaia_keep_only_valid_sequences (query->aln, params.ambig_q->dval[0], true); // true -> check if seqs are aligned, exiting o.w.
   fprintf (stderr, "Final query database composed of  %d valid references (after excluding low quality).\n", query->aln->ntax); fflush(stderr);
   if (query->aln->ntax < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.fasta->filename[0]);
   biomcmc_get_time (time1); // starts counting here (since we'll have a total time0 and a within-loop time1 chronometer 
 
   /* 1.1 create indices of polymorphic and monomorphic sites, skipping indels and Ns */
   create_query_indices (query);
-  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons)\n", query->n_idx, query->n_idx_c); fflush(stderr);
+  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons); starting main comparison (this may take a while)\n", 
+           query->n_idx, query->n_idx_c); fflush(stderr);
   /* 1.2 several ref sequences per thread (i.e. total n_clust read at once, distributed over threads), with char pointers etc*/
   cq = new_queue (n_clust, query->dist, query->trim); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
   outstream = biomcmc_open_compress (outfilename, "w");
- 
+
+  non_n_ref = (int)(query->aln->nchar * params.ambig_r->dval[0]);
+
   /* 2. read alignment files (can be several) and fill pool of cluster queues */
-  count = 0;
+  count = n_invalid = 0;
   for (j = 0; j < params.ref->count; j++) {
     rfas = new_readfasta (params.ref->filename[j]);
     end_of_file = false;
@@ -170,6 +185,11 @@ main (int argc, char **argv)
         cq->mindist[c] = 0xffffff;
         if (readfasta_next (rfas) >= 0) {
           count++;
+          if (quick_count_sequence_non_N (rfas->seq, rfas->seqlength) < non_n_ref) {
+            cq->seq[c] = cq->name[c] = NULL;
+            c--; n_invalid++; // try again this vector element
+            continue; // skip to next (c<n_clust) for iteration
+          }
           cq->seq[c] = rfas->seq; rfas->seq = NULL;
           cq->name[c] = rfas->name; rfas->name = NULL;
           if (rfas->seqlength != (size_t) query->aln->nchar) {
@@ -186,15 +206,9 @@ main (int argc, char **argv)
         }
       } // single thread for() loop
 
-#pragma omp parallel for shared(c, count, cq)
+#pragma omp parallel for shared(c, query, cq)
       for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // dist can never be more than (cq->dist+1) and we want to distinghuish dist 0 and 1 
         seq_ball_against_query_structure (&(cq->seq[c]), &(cq->mindist[c]), cq->dist + 1, query);
-      }
-
-      if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
-        elapsed = biomcmc_update_elapsed_time (time1); 
-        fprintf (stderr, "%d sequences analysed in total; last %d sequences took %.3lf secs\n", count, print_interval, elapsed); 
-        fflush(stderr);
       }
 
 #pragma omp single
@@ -204,11 +218,18 @@ main (int argc, char **argv)
           save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->aln->nchar, cq->name[c], strlen (cq->name[c]));
         }
       }
+
+      if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
+        elapsed = biomcmc_update_elapsed_time (time1); 
+        fprintf (stderr, "%d sequences analysed in total, %d saved, %d rejected due to high ambiguity; most recent %d sequences took %.3lf secs\n", count, n_output, n_invalid, print_interval, elapsed); 
+        fflush(stderr);
+      }
+
     } // while not end of file
 
     del_readfasta (rfas);
-    fprintf (stderr, "Finished reading file %s in %.3lf secs; So far, total of %d sequences read, %d sequences kept\n", 
-             params.ref->filename[j], biomcmc_update_elapsed_time (time0), count, n_output); 
+    fprintf (stderr, "Finished reading file %s in %.3lf secs; Total of %d sequences read, %d sequences within radius (kept), %d too ambiguous (excluded)\n", 
+             params.ref->filename[j], biomcmc_update_elapsed_time (time0), count, n_output, n_invalid); 
     fflush (stderr);
   }  // for fasta file
   

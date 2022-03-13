@@ -15,6 +15,7 @@ void quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score,
 void quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int *score);
 void quick_pairwise_score_truncated_idx (char *s1, char *s2, size_t nsites, int maxdist, int *score, int *idx);
 void quick_pairwise_score_truncated_idx_indelcheck (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx);
+void quick_pairwise_score_acgt (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx);
 int quick_count_sequence_non_N (char *s, size_t nsites);
 
 int
@@ -570,6 +571,15 @@ quick_pairwise_score_truncated_idx_indelcheck (char *s1, char *s2, size_t nsites
   return;
 }
 
+void
+quick_pairwise_score_acgt (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx)
+{ // assumes upper(), and just count text matches; relies on call to initialise_acgt() from utils.c
+  size_t j;
+  score[0] = 0;
+  for (j=0; (j < nsites) && (score[0] < maxdist); j++) score[0] += (int) is_site_acgt_distinct_pair (s1[idx[j]], s2[idx[j]]);
+  return;
+}
+
 int
 quick_count_sequence_non_N (char *s, size_t nsites)
 {
@@ -584,22 +594,36 @@ void
 seq_ball_against_query_structure (char **seq, int *min_dist, int ball_radius, query_t qu)
 {
   int i, c_dist=0;
-  quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->consensus, qu->n_idx_c, ball_radius, min_dist, qu->idx_c);
-  if (*min_dist >= ball_radius) return;
-  c_dist = *min_dist;
-  for (i = 0; (i < qu->aln->ntax) && ((*min_dist + c_dist) >= ball_radius); i++) { 
-    quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->aln->character->string[i], qu->n_idx, ball_radius - c_dist, min_dist, qu->idx);
+  if (qu->acgt) {
+    quick_pairwise_score_acgt (*seq, qu->consensus, qu->n_idx_c, ball_radius, min_dist, qu->idx_c);
+    if (*min_dist >= ball_radius) return;
+    c_dist = *min_dist;
+    for (i = 0; (i < qu->aln->ntax) && ((*min_dist + c_dist) >= ball_radius); i++) { 
+      quick_pairwise_score_acgt (*seq, qu->aln->character->string[i], qu->n_idx, ball_radius - c_dist, min_dist, qu->idx);
+    }
+    *min_dist += c_dist;
+    return;
   }
-  *min_dist += c_dist;
+  else {
+    quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->consensus, qu->n_idx_c, ball_radius, min_dist, qu->idx_c);
+    if (*min_dist >= ball_radius) return;
+    c_dist = *min_dist;
+    for (i = 0; (i < qu->aln->ntax) && ((*min_dist + c_dist) >= ball_radius); i++) { 
+      quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->aln->character->string[i], qu->n_idx, ball_radius - c_dist, min_dist, qu->idx);
+    }
+    *min_dist += c_dist;
+    return;
+  }
 }
 
 query_t
-new_query_structure_from_fasta (char *filename, int trim, int dist)
+new_query_structure_from_fasta (char *filename, int trim, int dist, int acgt)
 {
  query_t qu = (query_t) biomcmc_malloc (sizeof (struct query_struct));
   qu->consensus = NULL;
   qu->idx_c = qu->idx = NULL;
   qu->n_idx_c = qu->n_idx = 0;
+  qu->acgt = (bool) acgt;
  
   qu->aln = read_fasta_alignment_from_file (filename, 0xf); // 0xf -> neither true or false, but gets only bare alignment info
   //int i,j;
@@ -632,12 +656,20 @@ create_query_indices (query_t qu)
 {
   int i,j;
   char s2;
+  initialise_acgt (); // from utils.c, has local vector 
 
   qu->consensus = (char*) biomcmc_malloc (qu->aln->nchar * sizeof (char));
   for (i = 0; i < qu->aln->nchar; i++) qu->consensus[i] = 'N';
-  for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
+
+  if (qu->acgt) for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
     s2 = qu->aln->character->string[j][i];
-    if ( (s2 == 'N') || (s2 == '-') || (s2 == '?')) continue; // skip this column
+    if (!is_site_acgt (s2)) continue; // skip indels but also partially ambiguous, focusing on ACGT differences
+    if (qu->consensus[i] == 'N') qu->consensus[i] = s2; // consensus is missing info, will receive ACGT from alignment
+    else if (qu->consensus[i] != s2) qu->consensus[i] = '#'; // ACGT info from consensus conflicts with current sequence
+  }
+  else for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
+    s2 = qu->aln->character->string[j][i];
+    if ( (s2 == 'N') || (s2 == '-') || (s2 == '?')) continue; // skip this column (only difference from loop above, acgt)
     if (qu->consensus[i] == 'N') qu->consensus[i] = s2; // consensus is missing info, will receive wathever state is from alignment
     else if (qu->consensus[i] != s2) qu->consensus[i] = '#';
   }
@@ -653,5 +685,4 @@ create_query_indices (query_t qu)
   qu->idx_c = (size_t*) biomcmc_realloc ((size_t*)qu->idx_c, qu->n_idx_c * sizeof (size_t)); 
   qu->idx   = (size_t*) biomcmc_realloc ((size_t*)qu->idx, qu->n_idx * sizeof (size_t)); 
 }
-
 

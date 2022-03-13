@@ -261,7 +261,20 @@ initialise_acgt (void)
   is_acgt['A'] = is_acgt['C'] = is_acgt['G'] = is_acgt['T'] = is_acgt['a'] = is_acgt['c'] = is_acgt['g'] = is_acgt['t'] = 1;
 }
 
-void
+bool
+is_site_acgt_distinct_pair (char s1, char s2) // relies on external call to initialise_acgt()
+{
+  if ((!is_acgt[(int)s1]) || (!is_acgt[(int)s2])) return false;
+  return (toupper(s1) != toupper(s2));
+}
+
+bool
+is_site_acgt (char s1) // relies on external call to initialise_acgt()
+{
+  return (bool) is_acgt[(int)s1];
+}
+
+void // not used (copied from first pilot "search_u.c" )
 compress_kseq_to_acgt (char *s, unsigned *l)
 {
   unsigned int i, new_l = 0;

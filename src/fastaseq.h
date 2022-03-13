@@ -44,6 +44,7 @@ struct query_struct
   char *consensus;
   size_t *idx_c, *idx, trim;
   int n_idx_c, n_idx, dist;
+  bool acgt;
 };
 
 int compare_fastaseq (const void *a, const void *b); /* \brief more neighours first, compare_score() if tie */
@@ -70,10 +71,11 @@ int readfasta_next (readfasta_t rfas);
 void del_readfasta (readfasta_t rfas);
 int accumulate_reference_sequence (char **ref, char *s, size_t nsites);
 int replace_Ns_from_reference (char *ref, size_t nsites);
+int quick_count_sequence_non_N (char *s, size_t nsites);
 
 /* for uvaia_ball */
 void seq_ball_against_query_structure (char **seq, int *min_dist, int ball_radius, query_t qu);
-query_t new_query_structure_from_fasta (char *filename, int trim, int dist);
+query_t new_query_structure_from_fasta (char *filename, int trim, int dist, int acgt);
 void del_query_structure (query_t qu);
 void create_query_indices (query_t qu);
 #endif

@@ -18,4 +18,8 @@ void save_sequences (const char *filename, int *idx, int n_idx, char_vector seq,
 char *return_query_aligned (int pattern_length, char* text, int text_length, edit_cigar_t* edit_cigar, mm_allocator_t* mm_allocator);
 void upper_kseq (char *s, unsigned l);
 
+void initialise_acgt (void);
+bool is_site_acgt_distinct_pair (char s1, char s2); // relies on external call to initialise_acgt()
+bool is_site_acgt (char s1); // relies on external call to initialise_acgt()
+
 #endif
