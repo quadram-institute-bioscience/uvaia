@@ -9,6 +9,7 @@ typedef struct
   struct arg_lit  *help;
   struct arg_lit  *version;
   struct arg_lit  *acgt;
+  struct arg_lit  *hires;
   struct arg_int  *dist;
   struct arg_int  *trim;
   struct arg_dbl  *ambig_q;
@@ -45,6 +46,7 @@ get_parameters_from_argv (int argc, char **argv)
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .acgt    = arg_litn("x","acgt",0, 1, "considers only ACGT sites (i.e. unambiguous SNP differences), more permissive and faster"),
+    .hires   = arg_litn("k","keep_resolved",0, 1, "when excluding redundant query seqs, keep the more resolved (instead of default, less resolved)"),
     .dist    = arg_intn("d","distance", NULL, 0, 1, "ball radius, i.e. refs within this distance to any query seq are kept"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
@@ -55,7 +57,8 @@ get_parameters_from_argv (int argc, char **argv)
     .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment with subset of ref sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.acgt, params.dist, params.trim, params.ambig_r, params.ambig_q, params.pool, params.ref, params.fasta, params.out, params.end};
+  void* argtable[] = {params.help, params.version, params.acgt, params.hires, params.dist, params.trim, 
+    params.ambig_r, params.ambig_q, params.pool, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.dist->ival[0] = 5;
   params.trim->ival[0] = 0;
@@ -80,6 +83,7 @@ del_arg_parameters (arg_parameters params)
   if (params.help)  free (params.help);
   if (params.version) free (params.version);
   if (params.acgt)  free (params.acgt);
+  if (params.hires)  free (params.hires);
   if (params.dist)  free (params.dist);
   if (params.trim) free (params.trim);
   if (params.ambig_q) free (params.ambig_q);
@@ -112,6 +116,12 @@ print_usage (arg_parameters params, char *progname)
     printf ("Default distance calculation is just number of char matches (e.g. A<->M are distinct chars although biologically compatible). ");
     printf ("However, option `--acgt` (or `-x`) neglects partially ambiguous and considers a distance only if the ACGT SNPs disagree. This may be faster but prune less sequences.\n\n");
     printf ("The suggested usage is to be permissive here (large radius of 5 or 10) and then use `uvaia` for more fine-grained neighbour match.\n\n");
+    printf ("Notice,however, that the set of neighbours is given mainly by the poorest-resolved query sequences, i.e. if a query sequence has too many Ns or indels, then fewer reference sequences ");
+    printf ("will disagree with it and will thus be within its radius (since only non-N sites are considered). You may consider excluding query sequences (by chosing a high ");
+    printf ("`--query_ambiguity` value) especially if they are within the same cluster as another, more resolved query sequence.\n\n");
+    printf ("Alternatively, you may use experimental option `--keep_resolved` to exclude lower-resolution query sequences in case there is an equivalent (i.e. no SNPs) with higher resolution.\n\n");
+    printf ("e.g.\nseq1 AAAGCG-C  (higer resolution)\nseq2 AA--CG-C  (lower resolution, but distance=0 to seq1 since no SNPs disagree)\nseq3 AAA-CGAC  (also redundant to seq1)\n");
+    printf ("seq4 AAA-CGTC  (also redundant to seq1; notice that this is a limitation of current `--kep_resolved` implementation since seq3 and seq4 should be kept...)\n\n");
   }
 
   del_arg_parameters (params);
@@ -146,7 +156,7 @@ main (int argc, char **argv)
   n_clust = 1; // compiled without openMP support (e.g. --disable-openmp)
   biomcmc_warning ("Program compiled without multithread support");
 #endif
-  if (params.pool->ival[0] >= n_clust) n_clust = params.pool->ival[0];
+  if (params.pool->ival[0] >= n_clust) n_clust = params.pool->ival[0]; // n_clust was temporary for max number of threads
   fprintf (stderr, "Creating a queue of %d sequences; radius distance is %d (refs more distant than this are excluded)\n", n_clust,params.dist->ival[0]); 
   fflush(stderr);
   
@@ -158,12 +168,18 @@ main (int argc, char **argv)
 
   fprintf (stderr, "Finished reading %d query references in %lf secs;\n", query->aln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
   uvaia_keep_only_valid_sequences (query->aln, params.ambig_q->dval[0], true); // true -> check if seqs are aligned, exiting o.w.
-  fprintf (stderr, "Final query database composed of  %d valid references (after excluding low quality).\n", query->aln->ntax); fflush(stderr);
+  fprintf (stderr, "Query database composed of %d valid references, after excluding low quality.\n", query->aln->ntax); fflush(stderr);
   if (query->aln->ntax < 1) biomcmc_error ("No valid reference sequences found. Please check file %s.", params.fasta->filename[0]);
   biomcmc_get_time (time1); // starts counting here (since we'll have a total time0 and a within-loop time1 chronometer 
 
   /* 1.1 create indices of polymorphic and monomorphic sites, skipping indels and Ns */
   create_query_indices (query);
+  reorder_query_structure (query); // from lower to higher resolution (seqs with more Ns first)
+  if (params.hires->count) {  // actually non-redundant sequences may be removed, e.g. AAAC-T and AA-CGT have distance zero but both are important
+    exclude_redundant_query_sequences (query, 1);
+    fprintf (stderr, "Query database now composed of %d valid references, after removing apparently redundant sequences.\n", query->aln->ntax); fflush(stderr);
+  } 
+
   fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons) ", query->n_idx, query->n_idx_c); 
   if (query->acgt) fprintf (stderr, "by focusing on ACGT differences only. Next step is main comparison, whic may take a while\n"); 
   else fprintf (stderr, "by focusing on text match (excluding only indels and Ns). Next step is main comparison, which may take a while\n"); 
@@ -225,6 +241,7 @@ main (int argc, char **argv)
       for (c = 0; c < cq->n_seqs; c++) { // not used anymore, must be freed by hand here o.w. we have dangling pointers
         if (cq->seq[c]) free (cq->seq[c]);
         if (cq->name[c]) free (cq->name[c]);
+        cq->seq[c] = cq->name[c] = NULL;
       }
 
       if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
@@ -245,6 +262,7 @@ main (int argc, char **argv)
 
   /* everybody is free to feel good */
   biomcmc_close_compress (outstream);
+  del_query_structure (query);
   del_arg_parameters (params);
   del_queue (cq);
   if (outfilename) free (outfilename);
@@ -286,7 +304,7 @@ del_queue (queue_t cq)
   if (!cq) return;
   int i;
   if (cq->seq) {
-    for (i=cq->n_seqs-1; i >= 0; i--) if (cq->seq[i]) free (cq->seq[i]); 
+    for (i = cq->n_seqs-1; i >= 0; i--) if (cq->seq[i]) free (cq->seq[i]); 
     free (cq->seq);
   }
   if (cq->name) {

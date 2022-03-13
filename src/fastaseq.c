@@ -588,6 +588,14 @@ quick_count_sequence_non_N (char *s, size_t nsites)
   return non_n;
 }
 
+int
+quick_count_sequence_acgt (char *s, size_t nsites)
+{
+  int non_n = 0;
+  for (size_t i = 0; i < nsites; i++) non_n += (int) is_site_acgt (s[i]);
+  return non_n;
+}
+
 /* uvaia_ball */ 
 
 void
@@ -684,5 +692,49 @@ create_query_indices (query_t qu)
   }
   qu->idx_c = (size_t*) biomcmc_realloc ((size_t*)qu->idx_c, qu->n_idx_c * sizeof (size_t)); 
   qu->idx   = (size_t*) biomcmc_realloc ((size_t*)qu->idx, qu->n_idx * sizeof (size_t)); 
+}
+
+void
+reorder_query_structure (query_t qu)
+{ // could use indices but this function is linear not quadratic on seqlength thus not critical
+  int i, *non_n; // non_n can be number of non-N or number of ACGT; and later used to store indices of best-to-worse 
+  empfreq e;
+
+  non_n = (int*) biomcmc_malloc (qu->aln->ntax * sizeof (int));	
+  if (qu->acgt) for (i = 0; i < qu->aln->ntax; i++) non_n[i] = quick_count_sequence_acgt  (qu->aln->character->string[i] + qu->trim, qu->aln->nchar - 2 * qu->trim); 
+  else          for (i = 0; i < qu->aln->ntax; i++) non_n[i] = quick_count_sequence_non_N (qu->aln->character->string[i] + qu->trim, qu->aln->nchar - 2 * qu->trim); 
+
+  e = new_empfreq_sort_increasing (non_n, qu->aln->ntax, 2); // 2 => int (other options are char, size_t)
+  for (i = 0; i < qu->aln->ntax; i++) non_n[i] = e->i[i].idx; // now non-n will have order index (in original char_vector) of best, second-best, etc.
+  char_vector_reorder_strings_from_external_order (qu->aln->character, non_n);
+  char_vector_reorder_strings_from_external_order (qu->aln->taxlabel, non_n);
+  if (non_n) free (non_n);
+  return;
+}
+
+void
+exclude_redundant_query_sequences (query_t qu, int keep_more_resolved)
+{
+  if (!qu->consensus) biomcmc_error ("I can only exclude sequences after indices are created");
+  int i, j, *valid, n_valid = 0, dist = 0;
+
+  valid = (int*) biomcmc_malloc (qu->aln->ntax * sizeof (int));
+  for (i = 0; i < qu->aln->ntax; i++) valid[i] = 1;
+
+  for (i = 0; i < qu->aln->ntax-1; i++) for (j = i + 1; j < qu->aln->ntax; j++) if (valid[i] && valid[j]) {
+    if (qu->acgt)            quick_pairwise_score_acgt (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, 1, &dist, qu->idx);
+    else quick_pairwise_score_truncated_idx_indelcheck (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, 1, &dist, qu->idx);
+    if (!dist) {  // one of i or j is redundant, and by order, seq[j] has more ACGT than seq[i]
+      if (keep_more_resolved) valid[i] = 0; // seq[i] is less resolved and thus removed
+      else                    valid[j] = 0; // seq[i] is less resolved and thus kept (default)
+    }
+  }
+
+  for (i = 0; i < qu->aln->ntax; i++) if (valid[i]) valid[n_valid++] = i; // overwrites, since n_valid is slower than i 
+  char_vector_reduce_to_valid_strings (qu->aln->character, valid, n_valid);
+  char_vector_reduce_to_valid_strings (qu->aln->taxlabel, valid, n_valid);
+  qu->aln->ntax = n_valid;
+  if (valid) free (valid);
+  return;
 }
 

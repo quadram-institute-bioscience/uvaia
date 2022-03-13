@@ -78,4 +78,6 @@ void seq_ball_against_query_structure (char **seq, int *min_dist, int ball_radiu
 query_t new_query_structure_from_fasta (char *filename, int trim, int dist, int acgt);
 void del_query_structure (query_t qu);
 void create_query_indices (query_t qu);
+void reorder_query_structure (query_t qu);
+void exclude_redundant_query_sequences (query_t qu, int keep_more_resolved);
 #endif
