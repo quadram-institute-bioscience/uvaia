@@ -51,7 +51,7 @@ get_parameters_from_argv (int argc, char **argv)
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
     .ambig_r = arg_dbl0("A","ref_ambiguity", NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
-    .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. how many reference seqs are queued to be processed in parallel (usually larger than avail threads, defaults to 4 per thread)"),
+    .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. how many reference seqs are queued to be processed in parallel (larger than number of threads, defaults to 64 per thread)"),
     .ref     = arg_filen("r","reference", "<ref.fa(.gz,.xz)>", 1, 1024, "aligned reference sequences (can be several files)"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa(.gz,.xz)>", 1, 1, "aligned query sequences"),
     .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment with subset of ref sequences"),
@@ -65,9 +65,9 @@ get_parameters_from_argv (int argc, char **argv)
   params.ambig_r->dval[0] = 0.5;
   params.ambig_q->dval[0] = 0.5;
 #ifdef _OPENMP
-  params.pool->ival[0] = 4 * omp_get_max_threads (); // default is to have quite a few
+  params.pool->ival[0] = 64 * omp_get_max_threads (); // default is to have quite a few
 #else
-  params.pool->ival[0] = 4;
+  params.pool->ival[0] = 64;
 #endif 
 
   /* actual parsing: */
@@ -113,7 +113,8 @@ print_usage (arg_parameters params, char *progname)
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
   if (params.help->count) {
-    printf ("experimental algorithm; if radius smaller than closest neighour to a sequence, then this sequence will have no neighbours!\n\n");
+    printf ("If radius is smaller than closest neighbour to a given sequence, then this sequence will have no neighbours! ");
+    printf ("The pool size are how many sequences are read into memory at once; reduce it if you don't have enough memory (or a humongous number of threads).\n\n");
     printf ("Default distance calculation is just number of char matches (e.g. A<->M are distinct chars although biologically compatible). ");
     printf ("However, option `--acgt` (or `-x`) neglects partially ambiguous and considers a distance only if the ACGT SNPs disagree. This may be faster but prune less sequences.\n\n");
     printf ("The suggested usage is to be permissive here (large radius of 5 or 10) and then use `uvaia` for more fine-grained neighbour match.\n\n");
@@ -136,7 +137,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, n_threads, thread_last, thread_block, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 10000;
+  int j, c, n_threads, thread_last, thread_block, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
