@@ -107,7 +107,8 @@ print_usage (arg_parameters params, char *progname)
   }
 
   printf ("%s \n", PACKAGE_STRING);
-  printf ("finds all reference neighbours to query sequences within a ball radius (i.e. close to any query sequence)\n");
+  printf ("Finds all reference neighbours to query sequences within a ball radius (i.e. close to any query sequence)\n");
+  printf ("Notice that saving the file with XZ compression is the current computation time bottleneck\n");
   printf ("The complete syntax is:\n\n %s ", basename(progname));
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
@@ -119,9 +120,12 @@ print_usage (arg_parameters params, char *progname)
     printf ("Notice,however, that the set of neighbours is given mainly by the poorest-resolved query sequences, i.e. if a query sequence has too many Ns or indels, then fewer reference sequences ");
     printf ("will disagree with it and will thus be within its radius (since only non-N sites are considered). You may consider excluding query sequences (by chosing a high ");
     printf ("`--query_ambiguity` value) especially if they are within the same cluster as another, more resolved query sequence.\n\n");
-    printf ("Alternatively, you may use experimental option `--keep_resolved` to exclude lower-resolution query sequences in case there is an equivalent (i.e. no SNPs) with higher resolution.\n\n");
-    printf ("e.g.\nseq1 AAAGCG-C  (higer resolution)\nseq2 AA--CG-C  (lower resolution, but distance=0 to seq1 since no SNPs disagree)\nseq3 AAA-CGAC  (also redundant to seq1)\n");
-    printf ("seq4 AAA-CGTC  (also redundant to seq1; notice that this is a limitation of current `--kep_resolved` implementation since seq3 and seq4 should be kept...)\n\n");
+    printf ("Alternatively, you may use the option `--keep_resolved` to exclude lower-resolution query sequences in case there is an equivalent (i.e. no SNPs) with higher resolution.");
+    printf ("(By default, if two sequences are equivalent ---in that one is more resolved than another---, the higher-resolution version is deleted since all references within a radius distance ");
+    printf ("to it would also be within the same radius for its lower-resolution equivalent). \n\n");
+    printf ("e.g.\nseq1 AAAGCG-C  : higher resolution\nseq2 AA--CG-C  : lower resolution, but distance=0 to seq1 since no SNPs disagree\nseq3 AAA-CGAC  : also no disagreements (d=0) to seq1\n");
+    printf ("seq4 AAA-CGTC  : also distance=0 to seq1\n\n");
+    printf ("Notice that both seq3 and seq4 have info not available on seq1 and thus are both kept. `--keep_resolved` only decides to keep seq1 instead of seq2\n\n");
   }
 
   del_arg_parameters (params);
@@ -132,7 +136,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 10000;
+  int j, c, n_threads, thread_last, thread_block, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 10000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
@@ -175,15 +179,19 @@ main (int argc, char **argv)
   /* 1.1 create indices of polymorphic and monomorphic sites, skipping indels and Ns */
   create_query_indices (query);
   reorder_query_structure (query); // from lower to higher resolution (seqs with more Ns first)
-  if (params.hires->count) {  // actually non-redundant sequences may be removed, e.g. AAAC-T and AA-CGT have distance zero but both are important
-    exclude_redundant_query_sequences (query, 1);
-    fprintf (stderr, "Query database now composed of %d valid references, after removing apparently redundant sequences.\n", query->aln->ntax); fflush(stderr);
-  } 
 
   fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons) ", query->n_idx, query->n_idx_c); 
-  if (query->acgt) fprintf (stderr, "by focusing on ACGT differences only. Next step is main comparison, whic may take a while\n"); 
-  else fprintf (stderr, "by focusing on text match (excluding only indels and Ns). Next step is main comparison, which may take a while\n"); 
+  if (query->acgt) fprintf (stderr, "by focusing on ACGT differences only. \n"); 
+  else fprintf (stderr, "by focusing on text match (excluding only indels and Ns).\n"); 
   fflush(stderr);
+
+  exclude_redundant_query_sequences (query, params.hires->count);
+  fprintf (stderr, "Query database now composed of %d valid references, after removing redundant (%s resolved) sequences.\n", 
+           query->aln->ntax, (params.hires->count? "less":"more"));
+  create_query_indices (query);
+  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (both of which are used in comparisons), after removing redundancy\n", query->n_idx, query->n_idx_c); 
+  fflush(stderr);
+
   /* 1.2 several ref sequences per thread (i.e. total n_clust read at once, distributed over threads), with char pointers etc*/
   cq = new_queue (n_clust, query->dist, query->trim); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
@@ -192,14 +200,18 @@ main (int argc, char **argv)
   non_n_ref = (int)(query->aln->nchar * params.ambig_r->dval[0]);
 
   /* 2. read alignment files (can be several) and fill pool of cluster queues */
+  fprintf (stderr, "\nNext step is main comparison, which may take a while\n\n"); 
   count = n_invalid = 0;
+  n_threads = omp_get_max_threads ();
+  thread_block = (int)(cq->n_seqs / n_threads);
+
   for (j = 0; j < params.ref->count; j++) {
     rfas = new_readfasta (params.ref->filename[j]);
     end_of_file = false;
 
     while (!end_of_file) {
 #pragma omp single
-      for (c = 0; c < n_clust; c++) { // reads n_clust sequences
+      for (c = 0; c < cq->n_seqs; c++) { // reads n_clust sequences
         cq->mindist[c] = 0xffffff;
         if (readfasta_next (rfas) >= 0) {
           count++;
@@ -226,15 +238,21 @@ main (int argc, char **argv)
         }
       } // single thread for() loop
 
+//#pragma omp parallel for shared(j, thread_block, query, cq) private (c, thread_last)
+//      for (j = 0; j < n_threads; j++) {
+//        thread_last = (j+1) * thread_block;
+//        if (thread_last > cq->n_seqs) thread_last = cq->n_seqs;
+//        for (c = j * thread_block; c < thread_last; c++) seq_ball_against_query_structure (&(cq->seq[c]), &(cq->mindist[c]), cq->dist + 1, query);
+//      }
 #pragma omp parallel for shared(c, query, cq)
       for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // dist can never be more than (cq->dist+1) and we want to distinghuish dist 0 and 1 
-        seq_ball_against_query_structure (&(cq->seq[c]), &(cq->mindist[c]), cq->dist + 1, query);
+       seq_ball_against_query_structure (&(cq->seq[c]), &(cq->mindist[c]), cq->dist + 1, query);
       }
 
-#pragma omp single
+#pragma omp single // lzma is multithreaded so we must make sure only one thread here
       for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // last round may have fewer sequences than n_seqs
         if (cq->mindist[c] <= cq->dist) { // if cq->dist is zero then we only want "identical" seqs
-          n_output++;
+          n_output++; 
           save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->aln->nchar, cq->name[c], strlen (cq->name[c]));
         }
       }
@@ -244,9 +262,9 @@ main (int argc, char **argv)
         cq->seq[c] = cq->name[c] = NULL;
       }
 
-      if ((count >= print_interval) && ((count % print_interval) < n_clust)) {
+      if ((count >= print_interval) && ((count % print_interval) < cq->n_seqs)) {
         elapsed = biomcmc_update_elapsed_time (time1); 
-        fprintf (stderr, "%d sequences analysed in total, %d saved, %d rejected due to high ambiguity; most recent %d sequences took %.3lf secs\n", count, n_output, n_invalid, print_interval, elapsed); 
+        fprintf (stderr, "%d sequences analysed in total, %d saved, %d rejected due to high ambiguity; %.3lf secs passed since\n", count, n_output, n_invalid, elapsed); 
         fflush(stderr);
       }
 

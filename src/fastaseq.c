@@ -17,6 +17,8 @@ void quick_pairwise_score_truncated_idx (char *s1, char *s2, size_t nsites, int 
 void quick_pairwise_score_truncated_idx_indelcheck (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx);
 void quick_pairwise_score_acgt (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx);
 int quick_count_sequence_non_N (char *s, size_t nsites);
+int left_is_resolved_right (char *s1, char *s2, size_t nsites, size_t *idx);
+int left_is_resolved_right_acgt (char *s1, char *s2, size_t nsites, size_t *idx);
 
 int
 compare_fastaseq (const void *a, const void *b)
@@ -581,6 +583,50 @@ quick_pairwise_score_acgt (char *s1, char *s2, size_t nsites, int maxdist, int *
 }
 
 int
+left_is_resolved_right (char *s1, char *s2, size_t nsites, size_t *idx) 
+{ // minus one if left is resolved, plus one if right is resolved, zero if identical and larger than one if distinct
+  size_t j;
+  int score = 0;
+  bool snp1, snp2;
+  for (j=0; (j < nsites) && (score < 0xff); j++) {
+    snp1 = !((s1[idx[j]] == 'N') || (s1[idx[j]] == '-') || (s1[idx[j]] == '?')); // snp1 = 1 if not a space; 0 o.w.
+    snp2 = !((s2[idx[j]] == 'N') || (s2[idx[j]] == '-') || (s2[idx[j]] == '?'));
+    if (snp1 == snp2) continue; // both indels or both SNPs (we assume same SNP, if called properly after calculating distance)
+    if (snp1 > snp2) { 
+      if (score > 0) return 0xff; // s2 was more resolved, i.e. more ACGTs, but here the ACGT is on s1 (so they're not equivalent)
+      else score = -1;
+    }
+    if (snp1 < snp2) {
+      if (score < 0) return 0xff; // s1 was more resolved, i.e. more ACGTs, but here the ACGT is on s2 (so they're not equivalent)
+      else score = 1;
+    }
+  }
+  return score;
+}
+
+int
+left_is_resolved_right_acgt (char *s1, char *s2, size_t nsites, size_t *idx) 
+{ // minus one if left is resolved, plus one if right is resolved, zero if identical and larger than one if distinct
+  size_t j;
+  int score = 0;
+  bool snp1, snp2;
+  for (j=0; (j < nsites) && (score < 0xff); j++) {
+    snp1 = is_site_acgt(s1[idx[j]]);
+    snp2 = is_site_acgt(s2[idx[j]]);
+    if (snp1 == snp2) continue; // both indels or both SNPs (we assume same SNP, if called properly after calculating distance)
+    if (snp1 > snp2) { 
+      if (score > 0) return 0xff; // s2 was more resolved, i.e. more ACGTs, but here the ACGT is on s1 (so they're not equivalent)
+      else score = -1;
+    }
+    if (snp1 < snp2) {
+      if (score < 0) return 0xff; // s1 was more resolved, i.e. more ACGTs, but here the ACGT is on s2 (so they're not equivalent)
+      else score = 1;
+    }
+  }
+  return score;
+}
+
+int
 quick_count_sequence_non_N (char *s, size_t nsites)
 {
   int non_n = nsites;
@@ -666,7 +712,7 @@ create_query_indices (query_t qu)
   char s2;
   initialise_acgt (); // from utils.c, has local vector 
 
-  qu->consensus = (char*) biomcmc_malloc (qu->aln->nchar * sizeof (char));
+  if (!qu->consensus) qu->consensus = (char*) biomcmc_malloc (qu->aln->nchar * sizeof (char)); // we may call this function more than once
   for (i = 0; i < qu->aln->nchar; i++) qu->consensus[i] = 'N';
 
   if (qu->acgt) for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
@@ -682,16 +728,16 @@ create_query_indices (query_t qu)
     else if (qu->consensus[i] != s2) qu->consensus[i] = '#';
   }
 
-  qu->idx_c = (size_t*) biomcmc_malloc ((qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
-  qu->idx   = (size_t*) biomcmc_malloc ((qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
+  qu->idx_c = (size_t*) biomcmc_realloc ((size_t*) qu->idx_c, (qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
+  qu->idx   = (size_t*) biomcmc_realloc ((size_t*) qu->idx,   (qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
   qu->n_idx_c = qu->n_idx = 0;
   
   for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) if (qu->consensus[i] != 'N') {
     if (qu->consensus[i] == '#') qu->idx[qu->n_idx++] = i; // polymorphic site; we need to check every alignment sequence
     else                     qu->idx_c[qu->n_idx_c++] = i; // non-segregating site; enough to compare with consensus
   }
-  qu->idx_c = (size_t*) biomcmc_realloc ((size_t*)qu->idx_c, qu->n_idx_c * sizeof (size_t)); 
-  qu->idx   = (size_t*) biomcmc_realloc ((size_t*)qu->idx, qu->n_idx * sizeof (size_t)); 
+  qu->idx_c = (size_t*) biomcmc_realloc ((size_t*) qu->idx_c, qu->n_idx_c * sizeof (size_t)); 
+  qu->idx   = (size_t*) biomcmc_realloc ((size_t*) qu->idx,   qu->n_idx   * sizeof (size_t)); 
 }
 
 void
@@ -714,9 +760,9 @@ reorder_query_structure (query_t qu)
 
 void
 exclude_redundant_query_sequences (query_t qu, int keep_more_resolved)
-{
+{ // this function is independent from reorder_query_structure
   if (!qu->consensus) biomcmc_error ("I can only exclude sequences after indices are created");
-  int i, j, *valid, n_valid = 0, dist = 0;
+  int i, j, *valid, n_valid = 0, dist = 0, red1, red2;
 
   valid = (int*) biomcmc_malloc (qu->aln->ntax * sizeof (int));
   for (i = 0; i < qu->aln->ntax; i++) valid[i] = 1;
@@ -724,9 +770,29 @@ exclude_redundant_query_sequences (query_t qu, int keep_more_resolved)
   for (i = 0; i < qu->aln->ntax-1; i++) for (j = i + 1; j < qu->aln->ntax; j++) if (valid[i] && valid[j]) {
     if (qu->acgt)            quick_pairwise_score_acgt (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, 1, &dist, qu->idx);
     else quick_pairwise_score_truncated_idx_indelcheck (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, 1, &dist, qu->idx);
-    if (!dist) {  // one of i or j is redundant, and by order, seq[j] has more ACGT than seq[i]
-      if (keep_more_resolved) valid[i] = 0; // seq[i] is less resolved and thus removed
-      else                    valid[j] = 0; // seq[i] is less resolved and thus kept (default)
+    if (!dist) {  // one of i or j is redundant, and by order, seq[j] has more ACGT than seq[i] (or the same, if they are not equivalent in fact
+      if (qu->acgt) { // first go over polymorphic sites (smaller set than non-polymorphic)
+        red1 = left_is_resolved_right_acgt (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, qu->idx);
+        if (red1 > 1) continue; // i and j are _not_ equivalent (one is not a more resolved version of the other, since both have unique SNPs)
+        red2 = left_is_resolved_right_acgt (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx_c, qu->idx_c);
+      }
+      else {
+        red1 = left_is_resolved_right (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, qu->idx);
+        if (red1 > 1) continue; // i and j are _not_ equivalent (one is not a more resolved version of the other, since both have unique SNPs)
+        red2 = left_is_resolved_right (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx_c, qu->idx_c);
+      }
+      if (red2 > 1) continue; // i and j are _not_ equivalent (one is not a more resolved version of the other, since both have unique SNPs)
+      if ((!red1) && (!red2)) valid[j] = 0; // 1 and 2 are identical, even at the indels and Ns
+      red1 += red2; // now it can be {-2,-1} if i more resolved, {1,2} if j more resolved and zero if not equivalent (red1 and red2 have opposite signs)
+      if (!red1) continue; // consensus indices and polymorphic indices have complementary SNP info
+      if (keep_more_resolved) {
+        if(red1 > 0) valid[i] = 0; // red1 > 0 means that seq[i] is less resolved
+        else         valid[j] = 0; // red1 < 0 means that seq[i] is more resolved
+      }
+      else { 
+        if(red1 > 0) valid[j] = 0; // red1 > 0 means that seq[i] is less resolved
+        else         valid[i] = 0; // red1 < 0 means that seq[i] is more resolved
+      }
     }
   }
 
