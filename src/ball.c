@@ -108,7 +108,7 @@ print_usage (arg_parameters params, char *progname)
 
   printf ("%s \n", PACKAGE_STRING);
   printf ("Finds all reference neighbours to query sequences within a ball radius (i.e. close to any query sequence)\n");
-  printf ("Notice that saving the file with XZ compression is the current computation time bottleneck\n");
+  printf ("Notice that this software is multithreaded (and currently there is no control over number of threads)\n"); 
   printf ("The complete syntax is:\n\n %s ", basename(progname));
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
