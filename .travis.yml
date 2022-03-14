@@ -1,4 +1,5 @@
 language: c
+dist: bionic
 git:
   submodules: true
 #install: make get-deps  # 
