@@ -24,8 +24,9 @@ typedef struct
 
 struct queue_struct
 {
-  int dist, n_seqs, *mindist, *ref_counter; // ref_counter should be positive if it's currently best seq for some query; zero o.w. (must be careful when updating ratchet)
+  int n_ratchet, n_query, n_seqs, *ref_counter; // ref_counter should be positive if it's currently best seq for some query; zero o.w. (must be careful when updating ratchet)
   size_t trim;
+  bool *is_best;
   char **seq, **name; // should have a mindist for query seqs, for each element of queue to avoid race conditions
 };
 
@@ -35,7 +36,7 @@ void print_usage (arg_parameters params, char *progname);
 
 char* get_outfile_prefix (const char *prefix, size_t *length);
 
-queue_t new_queue (int n_seqs, int dist, size_t trim);
+queue_t new_queue (int n_ref, int n_query, int dist, size_t trim);
 void del_queue (queue_t cq);
 void save_sequence_to_compress_stream (file_compress_t out, char *seq, size_t seq_l, char *name, size_t name_l);
 
@@ -46,8 +47,7 @@ get_parameters_from_argv (int argc, char **argv)
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .hires   = arg_litn("k","keep_resolved",0, 1, "when excluding redundant query seqs, keep the more resolved (instead of default, less resolved)"),
-    .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to store sequence (default=8)"),
-    .nmax    = arg_int0("m","nmax", NULL, "max number of best reference sequences to store names"),
+    .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to store (default=1000)"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
     .ambig_r = arg_dbl0("A","ref_ambiguity", NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
@@ -57,11 +57,10 @@ get_parameters_from_argv (int argc, char **argv)
     .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment with nearest neighbour sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.hires, params.nbest, params.nmax, params.trim, 
+  void* argtable[] = {params.help, params.version, params.hires, params.nbest, params.trim, 
     params.ambig_r, params.ambig_q, params.pool, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
-  params.nbest->ival[0] = 8;
-  params.nmax->ival[0] = 1000;
+  params.nbest->ival[0] = 1000;
   params.trim->ival[0] = 0;
   params.ambig_r->dval[0] = 0.5;
   params.ambig_q->dval[0] = 0.5;
@@ -85,7 +84,6 @@ del_arg_parameters (arg_parameters params)
   if (params.version) free (params.version);
   if (params.hires)  free (params.hires);
   if (params.nbest)  free (params.nbest);
-  if (params.nmax)   free (params.nmax);
   if (params.trim)   free (params.trim);
   if (params.ambig_q) free (params.ambig_q);
   if (params.ambig_r) free (params.ambig_r);
@@ -131,7 +129,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, n_threads, thread_last, thread_block, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
+  int j, c, n_threads, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
@@ -148,6 +146,7 @@ main (int argc, char **argv)
   if (params.ambig_q->dval[0] > 1.)    params.ambig_q->dval[0] = 1.;
   if (params.ambig_r->dval[0] < 0.001) params.ambig_r->dval[0] = 0.001;
   if (params.ambig_r->dval[0] > 1.)    params.ambig_r->dval[0] = 1.;
+  if (params.nbest->ival[0] < 1)       params.nbest->ival[0] = 1;
 
 #ifdef _OPENMP
   n_clust = omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
@@ -160,7 +159,7 @@ main (int argc, char **argv)
   fflush(stderr);
   
   if (params.out->count) outfilename = get_outfile_prefix (params.out->filename[0], &outlength); // outfilename already has "aln.xz" suffix
-  else                   outfilename = get_outfile_prefix ("ball_uvaia", &outlength);
+  else                   outfilename = get_outfile_prefix ("nn_uvaia", &outlength);
 
   /* 1. read query sequences into char_vectors */
   query = new_query_structure_from_fasta ((char*)params.fasta->filename[0], params.trim->ival[0], params.dist->ival[0], params.acgt->count);
@@ -187,10 +186,12 @@ main (int argc, char **argv)
   fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (both of which are used in comparisons), after removing redundancy\n", query->n_idx, query->n_idx_c); 
   fflush(stderr);
 
-  /* 1.2 several ref sequences per thread (i.e. total n_clust read at once, distributed over threads), with char pointers etc*/
-  cq = new_queue (n_clust, query->dist, query->trim); // query has corrected trim and dist
+  // FIXME: here concurrent vector of queries is created (one element per query seq, pthreads will iterate over it) -> can be inside cq
+
+  /* 1.2 several ref sequences with char pointers etc, unrelated to number of threads (just the batch of seqs read at once) */
+  cq = new_queue (n_clust, query->aln->ntax, query->dist, query->trim); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
-  outstream = biomcmc_open_compress (outfilename, "w");
+  outstream = biomcmc_open_compress (outfilename, "w"); 
 
   non_n_ref = (int)(query->aln->nchar * params.ambig_r->dval[0]);
 
@@ -206,8 +207,7 @@ main (int argc, char **argv)
 
     while (!end_of_file) {
 #pragma omp single
-      for (c = 0; c < cq->n_seqs; c++) { // reads n_clust sequences
-        cq->mindist[c] = 0xffffff;
+      for (c = 0; c < cq->n_ref; c++) { // reads n_clust sequences
         if (readfasta_next (rfas) >= 0) {
           count++;
           if (quick_count_sequence_non_N (rfas->seq, rfas->seqlength) < non_n_ref) {
@@ -233,31 +233,34 @@ main (int argc, char **argv)
         }
       } // single thread for() loop
 
-//#pragma omp parallel for shared(j, thread_block, query, cq) private (c, thread_last)
-//      for (j = 0; j < n_threads; j++) {
-//        thread_last = (j+1) * thread_block;
-//        if (thread_last > cq->n_seqs) thread_last = cq->n_seqs;
-//        for (c = j * thread_block; c < thread_last; c++) seq_ball_against_query_structure (&(cq->seq[c]), &(cq->mindist[c]), cq->dist + 1, query);
-//      }
-#pragma omp parallel for shared(c, query, cq)
-      for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // dist can never be more than (cq->dist+1) and we want to distinghuish dist 0 and 1 
-       seq_ball_against_query_structure (&(cq->seq[c]), &(cq->mindist[c]), cq->dist + 1, query);
+#pragma omp parallel for shared(j, query, cq) private (c)
+      for (j = 0; j < cq->n_query; j++) {   
+        // FIXME pseudocode. warning: ratchet can only start after heap is full (o.w. we might never fill it if e.g. first seq is already best),
+        // and once it is full we must sort before start using the ratchet
+        for (c = 0; c < cq->n_ref; c++) add_ratchet (query, j, cq, c); // or c loop can be inside add_ratchet()
+      }
+// Currently, saving seqs is a seq dump. we could alternatively check each ref to see if it's _current_best_match_ for each query, but we migth miss e.g. 
+// consecutive sequences that would all belong to best set. Thus better to save more than necessary (any seq that at
+// some point was included in the best set, even if ultimately they look far)
+#pragma omp parallel for shared(c, cq) private (j)
+      for (c = 0; c < cq->n_ref; c++) if (cq->seq[c]) { 
+        for (j = 1; j < cq->n_query; j++) cq->is_best[cq->n_query * c + 0] |=  cq->is_best[cq->n_query * c + j]; // onedim [n_ref][n_query]
       }
 
 #pragma omp single // lzma is multithreaded so we must make sure only one thread here
-      for (c = 0; c < cq->n_seqs; c++) if (cq->seq[c]) { // last round may have fewer sequences than n_seqs
-        if (cq->mindist[c] <= cq->dist) { // if cq->dist is zero then we only want "identical" seqs
-          n_output++; 
+      for (c = 0; c < cq->n_ref; c++) if (cq->seq[c]) { // last round may have fewer sequences than n_seqs
+        if (cq->is_best[cq->n_query * c] > 0) { // is new best for some of the query seqs
+          n_output++;
           save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->aln->nchar, cq->name[c], strlen (cq->name[c]));
         }
       }
-      for (c = 0; c < cq->n_seqs; c++) { // not used anymore, must be freed by hand here o.w. we have dangling pointers
+      for (c = 0; c < cq->n_ref; c++) { // not used anymore, must be freed by hand here o.w. we have dangling pointers
         if (cq->seq[c]) free (cq->seq[c]);
         if (cq->name[c]) free (cq->name[c]);
         cq->seq[c] = cq->name[c] = NULL;
       }
 
-      if ((count >= print_interval) && ((count % print_interval) < cq->n_seqs)) {
+      if ((count >= print_interval) && ((count % print_interval) < cq->n_ref)) {
         elapsed = biomcmc_update_elapsed_time (time1); 
         fprintf (stderr, "%d sequences analysed in total, %d saved, %d rejected due to high ambiguity; %.3lf secs passed since\n", count, n_output, n_invalid, elapsed); 
         fflush(stderr);
@@ -272,6 +275,10 @@ main (int argc, char **argv)
   }  // for fasta file
   
   fprintf (stderr, "Saved %d sequences to file %s\n", n_output, outstream->filename); 
+
+  strcpy (outfilename + outlength, ".csv.xz");
+  save_distance_table (cq, outfilename);
+  fprintf (stderr, "Saved distance table to file %s\n", outstream->filename); 
 
   /* everybody is free to feel good */
   biomcmc_close_compress (outstream);
@@ -295,19 +302,20 @@ get_outfile_prefix (const char *prefix, size_t *length)
 }
   
 queue_t
-new_queue (int n_seqs, int dist, size_t trim)
+new_queue (int n_ref, int n_query, int n_ratchet, size_t trim)
 {
   queue_t cq = (queue_t) biomcmc_malloc (sizeof (struct queue_struct));
   int c;
-  cq->n_seqs = n_seqs;
-
+  cq->n_ref = n_ref;
+  cq->n_query = n_query
   cq->trim = trim;
-  cq->dist = dist;
+  cq->n_ratchet = n_ratchet;
 
-  cq->seq    = (char**) biomcmc_malloc (n_seqs * sizeof (char*)); // only pointer, actual seq is allocated by readfasta
-  cq->name   = (char**) biomcmc_malloc (n_seqs * sizeof (char*)); // only pointer '' '' ''
-  cq->mindist = (int*)  biomcmc_malloc (n_seqs * sizeof (int*));
-  for (c = 0; c < n_seqs; c++) { cq->seq[c] = cq->name[c] = NULL; cq->mindist[c] = 0xffffff; }
+  cq->seq    = (char**) biomcmc_malloc (n_ref * sizeof (char*)); // only pointer, actual seq is allocated by readfasta
+  cq->name   = (char**) biomcmc_malloc (n_ref * sizeof (char*)); // only pointer '' '' ''
+  cq->is_best = (bool*)  biomcmc_malloc (n_ref * n_query * sizeof (bool*));
+  for (c = 0; c < n_ref; c++) { cq->seq[c] = cq->name[c] = NULL;}
+  for (c = 0; c < n_ref * n_query ; c++) cq->is_best[c] = 0;
   return cq;
 }
 
@@ -324,7 +332,7 @@ del_queue (queue_t cq)
     for (i=cq->n_seqs-1; i >= 0; i--) if (cq->name[i]) free (cq->name[i]); 
     free (cq->name);
   }
-  if (cq->mindist) free (cq->mindist);
+  if (cq->is_best) free (cq->is_best);
   free (cq);
   return;
 }
