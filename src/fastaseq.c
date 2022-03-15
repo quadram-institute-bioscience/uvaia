@@ -23,7 +23,7 @@ int left_is_resolved_right_acgt (char *s1, char *s2, size_t nsites, size_t *idx)
 int
 compare_fastaseq (const void *a, const void *b)
 {  
-  int res_i = (*(fastaseq_t*)b)->n_nn - (*(fastaseq_t*)a)->n_nn; // decreasing
+  int res_i = (*(fastaseq_t*)b)->n_nn - (*(fastaseq_t*)a)->n_nn; // decreasing since sort is ascending order (-1 to +1)
   if (res_i) return res_i;
   return compare_fastaseq_score (a,b);
 }
