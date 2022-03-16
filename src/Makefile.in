@@ -89,7 +89,8 @@ POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
 bin_PROGRAMS = uvaialign$(EXEEXT) uvaia_search_u$(EXEEXT) \
-	uvaia$(EXEEXT) uvaiaclust$(EXEEXT) uvaiaball$(EXEEXT)
+	uvaia$(EXEEXT) uvaiaclust$(EXEEXT) uvaiaball$(EXEEXT) \
+	uvaiann$(EXEEXT)
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
@@ -134,6 +135,10 @@ uvaiaclust_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_uvaialign_OBJECTS = align.$(OBJEXT)
 uvaialign_OBJECTS = $(am_uvaialign_OBJECTS)
 uvaialign_DEPENDENCIES = $(am__DEPENDENCIES_2)
+am_uvaiann_OBJECTS = nearest.$(OBJEXT) utils.$(OBJEXT) \
+	fastaseq.$(OBJEXT) min_heap.$(OBJEXT)
+uvaiann_OBJECTS = $(am_uvaiann_OBJECTS)
+uvaiann_DEPENDENCIES = $(am__DEPENDENCIES_2)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -170,10 +175,10 @@ am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
 SOURCES = $(uvaia_SOURCES) $(uvaia_search_u_SOURCES) \
 	$(uvaiaball_SOURCES) $(uvaiaclust_SOURCES) \
-	$(uvaialign_SOURCES)
+	$(uvaialign_SOURCES) $(uvaiann_SOURCES)
 DIST_SOURCES = $(uvaia_SOURCES) $(uvaia_search_u_SOURCES) \
 	$(uvaiaball_SOURCES) $(uvaiaclust_SOURCES) \
-	$(uvaialign_SOURCES)
+	$(uvaialign_SOURCES) $(uvaiann_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -350,6 +355,8 @@ uvaiaclust_SOURCES = cluster.c utils.c utils.h fastaseq.h fastaseq.c
 uvaiaclust_LDADD = $(LDADD)
 uvaiaball_SOURCES = ball.c utils.c utils.h fastaseq.h fastaseq.c
 uvaiaball_LDADD = $(LDADD)
+uvaiann_SOURCES = nearest.c utils.c utils.h fastaseq.h fastaseq.c min_heap.c min_heap.h
+uvaiann_LDADD = $(LDADD)
 all: all-am
 
 .SUFFIXES:
@@ -363,9 +370,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign src/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu src/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --foreign src/Makefile
+	  $(AUTOMAKE) --gnu src/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -453,6 +460,10 @@ uvaialign$(EXEEXT): $(uvaialign_OBJECTS) $(uvaialign_DEPENDENCIES) $(EXTRA_uvaia
 	@rm -f uvaialign$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(uvaialign_OBJECTS) $(uvaialign_LDADD) $(LIBS)
 
+uvaiann$(EXEEXT): $(uvaiann_OBJECTS) $(uvaiann_DEPENDENCIES) $(EXTRA_uvaiann_DEPENDENCIES) 
+	@rm -f uvaiann$(EXEEXT)
+	$(AM_V_CCLD)$(LINK) $(uvaiann_OBJECTS) $(uvaiann_LDADD) $(LIBS)
+
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
 
@@ -463,6 +474,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ball.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/cluster.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fastaseq.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/min_heap.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nearest.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search_u.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utils.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uvaia.Po@am__quote@

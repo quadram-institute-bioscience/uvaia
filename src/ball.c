@@ -137,7 +137,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, n_threads, thread_last, thread_block, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
+  int j, c, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
@@ -203,8 +203,8 @@ main (int argc, char **argv)
   /* 2. read alignment files (can be several) and fill pool of cluster queues */
   fprintf (stderr, "\nNext step is main comparison, which may take a while\n\n"); 
   count = n_invalid = 0;
-  n_threads = omp_get_max_threads ();
-  thread_block = (int)(cq->n_seqs / n_threads);
+  // n_threads = omp_get_max_threads ();
+  // thread_block = (int)(cq->n_seqs / n_threads);
 
   for (j = 0; j < params.ref->count; j++) {
     rfas = new_readfasta (params.ref->filename[j]);

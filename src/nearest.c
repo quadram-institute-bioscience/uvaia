@@ -1,6 +1,7 @@
 #include <biomcmc.h>
 
 #include "fastaseq.h"
+#include "min_heap.h"
 
 typedef struct queue_struct* queue_t;
 
@@ -8,6 +9,7 @@ typedef struct
 {
   struct arg_lit  *help;
   struct arg_lit  *version;
+  struct arg_lit  *acgt;
   struct arg_lit  *hires;
   struct arg_int  *nbest;
   struct arg_int  *nmax;
@@ -24,7 +26,8 @@ typedef struct
 
 struct queue_struct
 {
-  int n_ratchet, n_query, n_seqs, *ref_counter; // ref_counter should be positive if it's currently best seq for some query; zero o.w. (must be careful when updating ratchet)
+  int max_incompatible, n_query, n_ref, *res; 
+  heap_t *heap;
   size_t trim;
   bool *is_best;
   char **seq, **name; // should have a mindist for query seqs, for each element of queue to avoid race conditions
@@ -36,9 +39,12 @@ void print_usage (arg_parameters params, char *progname);
 
 char* get_outfile_prefix (const char *prefix, size_t *length);
 
-queue_t new_queue (int n_ref, int n_query, int dist, size_t trim);
+queue_t new_queue (int n_ref, int n_query, int heap_size, size_t trim);
 void del_queue (queue_t cq);
 void save_sequence_to_compress_stream (file_compress_t out, char *seq, size_t seq_l, char *name, size_t name_l);
+void queue_distance_to_consensus (query_t query, queue_t cq, int ir);
+void queue_update_min_heaps (query_t query, int iq, queue_t cq, int ir);
+void save_distance_table (queue_t cq, query_t query, char *filename);
 
 arg_parameters
 get_parameters_from_argv (int argc, char **argv)
@@ -46,7 +52,8 @@ get_parameters_from_argv (int argc, char **argv)
   arg_parameters params = {
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
-    .hires   = arg_litn("k","keep_resolved",0, 1, "when excluding redundant query seqs, keep the more resolved (instead of default, less resolved)"),
+    .acgt    = arg_litn("x","acgt",0, 1, "considers only ACGT sites (i.e. unambiguous SNP differences) in query sequences (experimental)"),
+    .hires   = arg_litn("k","keep_resolved",0, 1, "keep more resolved and exclude redundant query seqs (default is to keep all)"),
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to store (default=1000)"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
@@ -57,7 +64,7 @@ get_parameters_from_argv (int argc, char **argv)
     .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment with nearest neighbour sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
-  void* argtable[] = {params.help, params.version, params.hires, params.nbest, params.trim, 
+  void* argtable[] = {params.help, params.version, params.acgt, params.hires, params.nbest, params.trim, 
     params.ambig_r, params.ambig_q, params.pool, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
   params.nbest->ival[0] = 1000;
@@ -82,6 +89,7 @@ del_arg_parameters (arg_parameters params)
 {
   if (params.help)  free (params.help);
   if (params.version) free (params.version);
+  if (params.acgt)   free (params.acgt);
   if (params.hires)  free (params.hires);
   if (params.nbest)  free (params.nbest);
   if (params.trim)   free (params.trim);
@@ -113,9 +121,9 @@ print_usage (arg_parameters params, char *progname)
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
   if (params.help->count) {
     printf ("Notice that poorly-resolved query sequences (with excess of Ns or indels) have more close neighbours, since only non-N sites are considered). ");
-    printf ("You may consider excluding query sequences (by chosing a high ");
-    printf ("`--query_ambiguity` value) especially if they are within the same cluster as another, more resolved query sequence.\n\n");
-    printf ("If two sequences are equivalent ---in that one is more resolved than another---, only the higher-resolution version is considered. \n\n ");
+    printf ("You may consider excluding query sequences by chosing a high ");
+    printf ("`--query_ambiguity` value especially if they are within the same cluster as another, more resolved query sequence.\n\n");
+    printf ("With `--keep_resolved`, if two sequences are equivalent ---in that one is more resolved than another---, only the higher-resolution version is considered. \n\n ");
     printf ("e.g.\nseq1 AAAGCG-C  : higher resolution\nseq2 AA--CG-C  : lower resolution, but distance=0 to seq1 since no SNPs disagree\nseq3 AAA-CGAC  : also no disagreements (d=0) to seq1\n");
     printf ("seq4 AAA-CGTC  : also distance=0 to seq1\n\n");
     printf ("Notice that both seq3 and seq4 have info not available on seq1 and thus are both kept. However seq2 is equivalent to seq1. \n\n");
@@ -129,7 +137,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, n_threads, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
+  int j, c, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
@@ -155,14 +163,14 @@ main (int argc, char **argv)
   biomcmc_warning ("Program compiled without multithread support");
 #endif
   if (params.pool->ival[0] >= n_clust) n_clust = params.pool->ival[0]; // n_clust was temporary for max number of threads
-  fprintf (stderr, "Creating a queue of %d sequences; radius distance is %d (refs more distant than this are excluded)\n", n_clust,params.dist->ival[0]); 
+  fprintf (stderr, "Creating a queue of %d sequences; for each query, the %d closest sequences will be stored\n", n_clust, params.nbest->ival[0]); 
   fflush(stderr);
   
   if (params.out->count) outfilename = get_outfile_prefix (params.out->filename[0], &outlength); // outfilename already has "aln.xz" suffix
   else                   outfilename = get_outfile_prefix ("nn_uvaia", &outlength);
 
   /* 1. read query sequences into char_vectors */
-  query = new_query_structure_from_fasta ((char*)params.fasta->filename[0], params.trim->ival[0], params.dist->ival[0], params.acgt->count);
+  query = new_query_structure_from_fasta ((char*)params.fasta->filename[0], params.trim->ival[0], 1, params.acgt->count); // 1=radius distance (not used here)
 
   fprintf (stderr, "Finished reading %d query references in %lf secs;\n", query->aln->ntax, biomcmc_update_elapsed_time (time0)); fflush(stderr);
   uvaia_keep_only_valid_sequences (query->aln, params.ambig_q->dval[0], true); // true -> check if seqs are aligned, exiting o.w.
@@ -179,17 +187,16 @@ main (int argc, char **argv)
   else fprintf (stderr, "by focusing on text match (excluding only indels and Ns).\n"); 
   fflush(stderr);
 
-  exclude_redundant_query_sequences (query, params.hires->count);
-  fprintf (stderr, "Query database now composed of %d valid references, after removing redundant (%s resolved) sequences.\n", 
-           query->aln->ntax, (params.hires->count? "less":"more"));
-  create_query_indices (query);
-  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (both of which are used in comparisons), after removing redundancy\n", query->n_idx, query->n_idx_c); 
-  fflush(stderr);
-
-  // FIXME: here concurrent vector of queries is created (one element per query seq, pthreads will iterate over it) -> can be inside cq
+  if (params.hires->count) { // else do nothing, don't try to remove more resolved and keep less resolved
+    exclude_redundant_query_sequences (query, params.hires->count);
+    fprintf (stderr, "Updated query database now composed of %d valid references, after removing redundant (more resolved) sequences.\n", query->aln->ntax);
+    create_query_indices (query);
+    fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (both of which are used in comparisons), after removing redundancy\n", query->n_idx, query->n_idx_c); 
+    fflush(stderr);
+  }
 
   /* 1.2 several ref sequences with char pointers etc, unrelated to number of threads (just the batch of seqs read at once) */
-  cq = new_queue (n_clust, query->aln->ntax, query->dist, query->trim); // query has corrected trim and dist
+  cq = new_queue (n_clust, query->aln->ntax, params.nbest->ival[0], query->trim); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
   outstream = biomcmc_open_compress (outfilename, "w"); 
 
@@ -198,8 +205,6 @@ main (int argc, char **argv)
   /* 2. read alignment files (can be several) and fill pool of cluster queues */
   fprintf (stderr, "\nNext step is main comparison, which may take a while\n\n"); 
   count = n_invalid = 0;
-  n_threads = omp_get_max_threads ();
-  thread_block = (int)(cq->n_seqs / n_threads);
 
   for (j = 0; j < params.ref->count; j++) {
     rfas = new_readfasta (params.ref->filename[j]);
@@ -233,11 +238,17 @@ main (int argc, char **argv)
         }
       } // single thread for() loop
 
+      // non-threaded
+      for (c = 0; c < cq->n_ref * cq->n_query ; c++) cq->is_best[c] = 0; // reset indicators
+      cq->max_incompatible = cq->heap[0]->max_incompatible; // we could use a min_heap here, but seems overkill
+      for (c = 1; c < cq->n_query; c++) if (cq->max_incompatible < cq->heap[c]->max_incompatible) cq->max_incompatible = cq->heap[c]->max_incompatible;
+
+#pragma omp parallel for shared(c, cq, query) 
+      for (c = 0; c < cq->n_ref; c++) { if (cq->seq[c]) queue_distance_to_consensus (query, cq, c); }
+
 #pragma omp parallel for shared(j, query, cq) private (c)
       for (j = 0; j < cq->n_query; j++) {   
-        // FIXME pseudocode. warning: ratchet can only start after heap is full (o.w. we might never fill it if e.g. first seq is already best),
-        // and once it is full we must sort before start using the ratchet
-        for (c = 0; c < cq->n_ref; c++) add_ratchet (query, j, cq, c); // or c loop can be inside add_ratchet()
+        for (c = 0; c < cq->n_ref; c++) if (cq->seq[c]) queue_update_min_heaps (query, j, cq, c);
       }
 // Currently, saving seqs is a seq dump. we could alternatively check each ref to see if it's _current_best_match_ for each query, but we migth miss e.g. 
 // consecutive sequences that would all belong to best set. Thus better to save more than necessary (any seq that at
@@ -248,7 +259,7 @@ main (int argc, char **argv)
       }
 
 #pragma omp single // lzma is multithreaded so we must make sure only one thread here
-      for (c = 0; c < cq->n_ref; c++) if (cq->seq[c]) { // last round may have fewer sequences than n_seqs
+      for (c = 0; c < cq->n_ref; c++) if (cq->seq[c]) { // last round may have fewer sequences than n_ref
         if (cq->is_best[cq->n_query * c] > 0) { // is new best for some of the query seqs
           n_output++;
           save_sequence_to_compress_stream (outstream, cq->seq[c], (size_t) query->aln->nchar, cq->name[c], strlen (cq->name[c]));
@@ -269,19 +280,19 @@ main (int argc, char **argv)
     } // while not end of file
 
     del_readfasta (rfas);
-    fprintf (stderr, "Finished reading file %s in %.3lf secs; Total of %d sequences read, %d sequences within radius (kept), %d too ambiguous (excluded)\n", 
-             params.ref->filename[j], biomcmc_update_elapsed_time (time0), count, n_output, n_invalid); 
+    fprintf (stderr, "Finished reading file %s in %.3lf secs;\n", params.ref->filename[j], biomcmc_update_elapsed_time (time0));
+    fprintf (stderr, "Total of %d sequences read; %d saved sequences include closest neighbours and intermediate, %d too ambiguous (excluded)\n", count, n_output, n_invalid); 
     fflush (stderr);
   }  // for fasta file
   
   fprintf (stderr, "Saved %d sequences to file %s\n", n_output, outstream->filename); 
+  biomcmc_close_compress (outstream);
 
   strcpy (outfilename + outlength, ".csv.xz");
-  save_distance_table (cq, outfilename);
-  fprintf (stderr, "Saved distance table to file %s\n", outstream->filename); 
+  save_distance_table (cq, query, outfilename);
+  fprintf (stderr, "Saved distance table to file %s\n", outfilename); 
 
   /* everybody is free to feel good */
-  biomcmc_close_compress (outstream);
   del_query_structure (query);
   del_arg_parameters (params);
   del_queue (cq);
@@ -302,20 +313,26 @@ get_outfile_prefix (const char *prefix, size_t *length)
 }
   
 queue_t
-new_queue (int n_ref, int n_query, int n_ratchet, size_t trim)
+new_queue (int n_ref, int n_query, int heap_size, size_t trim)
 {
   queue_t cq = (queue_t) biomcmc_malloc (sizeof (struct queue_struct));
   int c;
   cq->n_ref = n_ref;
-  cq->n_query = n_query
+  cq->n_query = n_query;
   cq->trim = trim;
-  cq->n_ratchet = n_ratchet;
+  cq->max_incompatible = 0xffffff;
 
+  cq->res    = (int*)   biomcmc_malloc (4 * n_ref * sizeof (int)); // each ref seq against query->consensus
   cq->seq    = (char**) biomcmc_malloc (n_ref * sizeof (char*)); // only pointer, actual seq is allocated by readfasta
   cq->name   = (char**) biomcmc_malloc (n_ref * sizeof (char*)); // only pointer '' '' ''
-  cq->is_best = (bool*)  biomcmc_malloc (n_ref * n_query * sizeof (bool*));
+  cq->is_best = (bool*) biomcmc_malloc (n_ref * n_query * sizeof (bool*));
   for (c = 0; c < n_ref; c++) { cq->seq[c] = cq->name[c] = NULL;}
   for (c = 0; c < n_ref * n_query ; c++) cq->is_best[c] = 0;
+  for (c = 0; c < n_ref * 4; c++) cq->res[c] = 0;
+
+  cq->heap = (heap_t*) biomcmc_malloc (n_query * sizeof (heap_t));
+  for (c = 0; c < n_query; c++) cq->heap[c] = new_heap_t (heap_size);
+
   return cq;
 }
 
@@ -325,14 +342,19 @@ del_queue (queue_t cq)
   if (!cq) return;
   int i;
   if (cq->seq) {
-    for (i = cq->n_seqs-1; i >= 0; i--) if (cq->seq[i]) free (cq->seq[i]); 
+    for (i = cq->n_ref-1; i >= 0; i--) if (cq->seq[i]) free (cq->seq[i]); 
     free (cq->seq);
   }
   if (cq->name) {
-    for (i=cq->n_seqs-1; i >= 0; i--) if (cq->name[i]) free (cq->name[i]); 
+    for (i=cq->n_ref-1; i >= 0; i--) if (cq->name[i]) free (cq->name[i]); 
     free (cq->name);
   }
+  if (cq->heap) {
+    for (i=cq->n_query-1; i >= 0; i--) del_heap_t (cq->heap[i]); 
+    free (cq->heap);
+  }
   if (cq->is_best) free (cq->is_best);
+  if (cq->res) free (cq->res);
   free (cq);
   return;
 }
@@ -347,4 +369,65 @@ save_sequence_to_compress_stream (file_compress_t xz, char *seq, size_t seq_l, c
   if (biomcmc_write_compress (xz, seq) != (int) seq_l) errors++;
   if (biomcmc_write_compress (xz, "\n") != 1) errors++;
   if (errors) fprintf (stderr,"File %s may not be correctly compressed, %d error%s occurred when saving sequence %s.\n", xz->filename, errors, ((errors > 1)? "s":""), name);
+}
+
+void
+queue_distance_to_consensus (query_t query, queue_t cq, int ir)
+{
+  biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->consensus, query->n_idx_c, cq->max_incompatible, cq->res + 4 * ir, (int*) query->idx_c);
+}
+
+void
+queue_update_min_heaps (query_t query, int iq, queue_t cq, int ir)
+{ // compare query iq with reference ir
+  q_item this;
+  int current_incompatible = cq->res[4*ir + 3] - cq->res[4*ir + 2]; // number of mismatches between this ref and query->consensus;
+  this.name = NULL;
+
+  if (current_incompatible > cq->heap[iq]->max_incompatible) return; // this reference is already too far from the query
+  current_incompatible = cq->heap[iq]->max_incompatible - current_incompatible; // decrease tolerance, since ref is already "current_incompatible" SNPs away from consensus (and thus, query)
+
+  biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->aln->character->string[iq], query->n_idx, current_incompatible, this.score, (int*) query->idx);
+  if ((this.score[3] - this.score[2]) >= current_incompatible) return; // too far from query
+
+  for (int i = 0; i < 4; i++) this.score[i] += cq->res[4*ir + i]; // score (ref) = score(ref,consensus) + score(ref, this query)
+  this.name = cq->name[ir]; // just a pointer (heap_insert copies if necessary)
+
+  if (heap_insert (cq->heap[iq], this)) { // ref ir is within min_heap for query iq
+    cq->is_best[cq->n_query * ir + iq] = 1; // onedim [n_ref][n_query]
+    if (cq->heap[iq]->n == cq->heap[iq]->heap_size) // heap is full (o.w. the first element might already be best and we'd never fill it)
+      cq->heap[iq]->max_incompatible = cq->heap[iq]->seq[1].score[3] - cq->heap[iq]->seq[1].score[2] + 1; // seq[1] contains the worse distance (amongst the best)
+  }
+} 
+
+void
+save_distance_table (queue_t cq, query_t query, char *filename)
+{
+  file_compress_t xz = biomcmc_open_compress (filename, "w");
+  char *buffer = NULL;
+  int i, j, k, errors=0;
+  size_t buf_len = 128;
+
+  buffer = (char*) biomcmc_malloc (buf_len * sizeof (char));
+  sprintf (buffer, "query,reference,ACGT_matches,text_matches,partial_matches,valid_sites\n");
+  if (biomcmc_write_compress (xz, buffer) != (int) strlen(buffer)) biomcmc_warning ("problem saving header of compressed file %s;", xz->filename);
+
+  for (i = 0; i < cq->n_query; i++) {
+    heap_finalise_heap_qsort (cq->heap[i]); // sort 
+    for (j = 0; j < cq->heap[i]->heap_size; j++) {
+      buf_len = strlen (cq->heap[i]->seq[j].name) + query->aln->taxlabel->nchars[i] + 60;
+      buffer = (char*) biomcmc_realloc ((char*) buffer, buf_len * sizeof (char));
+      buffer[0] = '\0';
+      sprintf (buffer, "%s,%s", query->aln->taxlabel->string[i], cq->heap[i]->seq[j].name);
+      for (k=0; k < 4; k++) sprintf (buffer + strlen(buffer), ",%d", cq->heap[i]->seq[j].score[k]); // +strlen() to go to last position, o.w. overwrites
+      sprintf (buffer + strlen(buffer), "\n");
+      if (biomcmc_write_compress (xz, buffer) != (int) strlen(buffer)) errors++; 
+      if (buffer) free (buffer);
+      buffer = NULL;
+    }
+  }
+  if (errors) fprintf (stderr,"File %s may not have been correctly compressed, %d error%s occurred.\n", xz->filename, errors, ((errors > 1)? "s":""));
+
+  biomcmc_close_compress (xz);
+  if (buffer) free (buffer);
 }
