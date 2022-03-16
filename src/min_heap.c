@@ -52,7 +52,7 @@ heap_t
 new_heap_t (int heap_size)
 {
   int i,j;
-  heap_t pq = (heap_t) biomcmc_malloc (sizeof (struct heap_struct)); 
+  heap_t pq = (heap_t) biomcmc_malloc (sizeof (struct heap_struct)); // some ppl suggested to avoid the type and sizeof(variable)
   pq->n = 0;
   pq->max_incompatible = 0xffffff; // starts with large value
   pq->heap_size = (heap_size < 2 ? 2: heap_size);
@@ -95,8 +95,10 @@ heap_insert (heap_t pq, q_item item) // item is a struct, not a pointer
 { // FIXME: malloc hell
   if (pq->n == pq->heap_size) { // replace if smaller than maximum
     if (compare_q_item_score (item.score, pq->seq[1].score) < 0) { // item has better score than the worst in heap
-      pq->seq[1].name = (char*) biomcmc_realloc ((char*) pq->seq[1].name, strlen(item.name) * sizeof (char));
-      strcpy(pq->seq[1].name, item.name); // copy is better than relying on ptrs
+      //pq->seq[1].name = (char*) biomcmc_realloc ((char*) pq->seq[1].name, strlen(item.name) * sizeof (char));
+      //strcpy(pq->seq[1].name, item.name); // copy is better than relying on ptrs
+      if (pq->seq[1].name) free (pq->seq[1].name);
+      pq->seq[1].name = strdup (item.name);
       for (int j = 0; j < N_SCORES; j++) pq->seq[1].score[j] = item.score[j];
       heap_bubble_down (pq, 1); 
       return true;
@@ -105,8 +107,9 @@ heap_insert (heap_t pq, q_item item) // item is a struct, not a pointer
   }
   else { // regular insert (a.k.a. push)
     pq->n++;
-    pq->seq[pq->n].name = (char*) biomcmc_malloc (strlen(item.name) * sizeof (char));
-    strcpy (pq->seq[pq->n].name, item.name);
+    //pq->seq[pq->n].name = (char*) biomcmc_malloc (strlen(item.name) * sizeof (char));
+    //strcpy (pq->seq[pq->n].name, item.name);
+    pq->seq[pq->n].name = strdup (item.name);
     for (int j = 0; j < N_SCORES; j++) pq->seq[pq->n].score[j] = item.score[j];
     heap_bubble_up (pq, pq->n);
     return true; // new item was added

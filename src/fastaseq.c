@@ -575,7 +575,7 @@ quick_pairwise_score_truncated_idx_indelcheck (char *s1, char *s2, size_t nsites
 
 void
 quick_pairwise_score_acgt (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx)
-{ // assumes upper(), and just count text matches; relies on call to initialise_acgt() from utils.c
+{ // assumes upper(), and just count acgt matches; relies on call to initialise_acgt() from utils.c
   size_t j;
   score[0] = 0;
   for (j=0; (j < nsites) && (score[0] < maxdist); j++) score[0] += (int) is_site_acgt_distinct_pair (s1[idx[j]], s2[idx[j]]);

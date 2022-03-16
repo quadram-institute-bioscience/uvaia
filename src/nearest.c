@@ -54,20 +54,20 @@ get_parameters_from_argv (int argc, char **argv)
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .acgt    = arg_litn("x","acgt",0, 1, "considers only ACGT sites (i.e. unambiguous SNP differences) in query sequences (experimental)"),
     .hires   = arg_litn("k","keep_resolved",0, 1, "keep more resolved and exclude redundant query seqs (default is to keep all)"),
-    .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to store (default=1000)"),
+    .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to store (default=100)"),
     .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
     .ambig_r = arg_dbl0("A","ref_ambiguity", NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
     .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. how many reference seqs are queued to be processed in parallel (larger than number of threads, defaults to 64 per thread)"),
     .ref     = arg_filen("r","reference", "<ref.fa(.gz,.xz)>", 1, 1024, "aligned reference sequences (can be several files)"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa(.gz,.xz)>", 1, 1, "aligned query sequences"),
-    .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment with nearest neighbour sequences"),
+    .out     = arg_file0("o","output", "<without suffix>", "prefix of xzipped output alignment and table with nearest neighbour sequences"),
     .end     = arg_end(10) // max number of errors it can store (o.w. shows "too many errors")
   };
   void* argtable[] = {params.help, params.version, params.acgt, params.hires, params.nbest, params.trim, 
     params.ambig_r, params.ambig_q, params.pool, params.ref, params.fasta, params.out, params.end};
   params.argtable = argtable; 
-  params.nbest->ival[0] = 1000;
+  params.nbest->ival[0] = 100;
   params.trim->ival[0] = 0;
   params.ambig_r->dval[0] = 0.5;
   params.ambig_q->dval[0] = 0.5;
@@ -189,7 +189,7 @@ main (int argc, char **argv)
 
   if (params.hires->count) { // else do nothing, don't try to remove more resolved and keep less resolved
     exclude_redundant_query_sequences (query, params.hires->count);
-    fprintf (stderr, "Updated query database now composed of %d valid references, after removing redundant (more resolved) sequences.\n", query->aln->ntax);
+    fprintf (stderr, "Updated query database now composed of %d valid references, after removing redundant (less resolved) sequences.\n", query->aln->ntax);
     create_query_indices (query);
     fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (both of which are used in comparisons), after removing redundancy\n", query->n_idx, query->n_idx_c); 
     fflush(stderr);
@@ -396,7 +396,7 @@ queue_update_min_heaps (query_t query, int iq, queue_t cq, int ir)
   if (heap_insert (cq->heap[iq], this)) { // ref ir is within min_heap for query iq
     cq->is_best[cq->n_query * ir + iq] = 1; // onedim [n_ref][n_query]
     if (cq->heap[iq]->n == cq->heap[iq]->heap_size) // heap is full (o.w. the first element might already be best and we'd never fill it)
-      cq->heap[iq]->max_incompatible = cq->heap[iq]->seq[1].score[3] - cq->heap[iq]->seq[1].score[2] + 1; // seq[1] contains the worse distance (amongst the best)
+      cq->heap[iq]->max_incompatible = cq->heap[iq]->seq[1].score[3] - cq->heap[iq]->seq[1].score[0] + 1; // seq[1] contains the worse distance (amongst the best)
   }
 } 
 
@@ -409,16 +409,16 @@ save_distance_table (queue_t cq, query_t query, char *filename)
   size_t buf_len = 128;
 
   buffer = (char*) biomcmc_malloc (buf_len * sizeof (char));
-  sprintf (buffer, "query,reference,ACGT_matches,text_matches,partial_matches,valid_sites\n");
+  sprintf (buffer, "query,reference,rank,ACGT_matches,text_matches,partial_matches,valid_sites\n");
   if (biomcmc_write_compress (xz, buffer) != (int) strlen(buffer)) biomcmc_warning ("problem saving header of compressed file %s;", xz->filename);
 
   for (i = 0; i < cq->n_query; i++) {
     heap_finalise_heap_qsort (cq->heap[i]); // sort 
     for (j = 0; j < cq->heap[i]->heap_size; j++) {
-      buf_len = strlen (cq->heap[i]->seq[j].name) + query->aln->taxlabel->nchars[i] + 60;
+      buf_len = strlen (cq->heap[i]->seq[j].name) + query->aln->taxlabel->nchars[i] + 64;
       buffer = (char*) biomcmc_realloc ((char*) buffer, buf_len * sizeof (char));
       buffer[0] = '\0';
-      sprintf (buffer, "%s,%s", query->aln->taxlabel->string[i], cq->heap[i]->seq[j].name);
+      sprintf (buffer, "%s,%s,%d", query->aln->taxlabel->string[i], cq->heap[i]->seq[j].name,j+1);
       for (k=0; k < 4; k++) sprintf (buffer + strlen(buffer), ",%d", cq->heap[i]->seq[j].score[k]); // +strlen() to go to last position, o.w. overwrites
       sprintf (buffer + strlen(buffer), "\n");
       if (biomcmc_write_compress (xz, buffer) != (int) strlen(buffer)) errors++; 
