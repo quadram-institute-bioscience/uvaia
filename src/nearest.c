@@ -39,7 +39,7 @@ void print_usage (arg_parameters params, char *progname);
 
 char* get_outfile_prefix (const char *prefix, size_t *length);
 
-queue_t new_queue (int n_ref, int n_query, int heap_size, size_t trim);
+queue_t new_queue (int n_ref, int n_query, int heap_size, size_t trim, int n_sites);
 void del_queue (queue_t cq);
 void save_sequence_to_compress_stream (file_compress_t out, char *seq, size_t seq_l, char *name, size_t name_l);
 void queue_distance_to_consensus (query_t query, queue_t cq, int ir);
@@ -115,7 +115,21 @@ print_usage (arg_parameters params, char *progname)
 
   printf ("%s \n", PACKAGE_STRING);
   printf ("For every query sequence, finds closest neighbours in reference alignment. \n");
-  printf ("Notice that this software is multithreaded (and currently there is no control over number of threads)\n"); 
+  printf ("Notice that this software is multithreaded (and currently there is no control over number of threads)\n\n"); 
+  printf ("It sorts neighbours in the same order as the table columns, using the next column to break ties:\n 1. ACGT_matches -- considering only ACGT \n");
+  printf (" 2. text_matches -- exact matches, thus M-M is a match but M-A is not\n");
+  printf (" 3. partial_matches -- M-A is considered a match since the partially ambiguous `M` equals {A,C}.\n");
+  printf ("    However the fully ambiguous `N` is neglected\n");
+  printf (" 4. valid_pair_comparisons -- the `effective` sequence length for the comparison, i.e. sum of sites\n");
+  printf ("     without gaps or N in any of the two sequences\n");
+  printf (" 5. ACGT_matches_unique -- a 'consensus' between query seqs is created, and this is the number of\n");
+  printf ("    matches present in the query but not in the consensus (in short, it prefers neighbours farther\n");
+  printf ("    from the common ancestor of the queries, in case of ties)\n");
+  printf (" 6. valid_ref_sites -- if everything else is the same, then sequences with less gaps and Ns are preferred\n");
+  printf ("    (caveat is that some sequencing labs  artificially impute states, in practice removing all gaps and Ns)\n\n");
+  printf ("The reported number of matches may differ between programs or runs due to how the query sequences are compressed and indexed, however the distances (mismatches) are preserved. ");
+  printf ("For instance `valid_pair_comparison - partial_matches` generates the same distances as snp-dists, since snp-dists can recognise partially ambiguous sites. ");
+  printf ("Sites with a gap or `N` is one of the sequences are ignored. The columns 1, 3, and 4 above are the most useful for the final user.\n\n");
   printf ("The complete syntax is:\n\n %s ", basename(progname));
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
@@ -196,7 +210,7 @@ main (int argc, char **argv)
   }
 
   /* 1.2 several ref sequences with char pointers etc, unrelated to number of threads (just the batch of seqs read at once) */
-  cq = new_queue (n_clust, query->aln->ntax, params.nbest->ival[0], query->trim); // query has corrected trim and dist
+  cq = new_queue (n_clust, query->aln->ntax, params.nbest->ival[0], query->trim, query->aln->nchar); // query has corrected trim and dist
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
   outstream = biomcmc_open_compress (outfilename, "w"); 
 
@@ -317,14 +331,14 @@ get_outfile_prefix (const char *prefix, size_t *length)
 }
   
 queue_t
-new_queue (int n_ref, int n_query, int heap_size, size_t trim)
+new_queue (int n_ref, int n_query, int heap_size, size_t trim, int n_sites)
 {
   queue_t cq = (queue_t) biomcmc_malloc (sizeof (struct queue_struct));
   int c;
   cq->n_ref = n_ref;
   cq->n_query = n_query;
   cq->trim = trim;
-  cq->max_incompatible = 0xffffff;
+  cq->max_incompatible = n_sites; // can be a lage number, this is more interpretable as output to user
 
   cq->res    = (int*)   biomcmc_malloc (4 * n_ref * sizeof (int)); // each ref seq against query->consensus
   cq->non_n  = (int*)   biomcmc_malloc (n_ref * sizeof (int)); // non-n (i.e. ACGT etc.) sites 
@@ -336,7 +350,7 @@ new_queue (int n_ref, int n_query, int heap_size, size_t trim)
   for (c = 0; c < n_ref * 4; c++) cq->res[c] = 0;
 
   cq->heap = (heap_t*) biomcmc_malloc (n_query * sizeof (heap_t));
-  for (c = 0; c < n_query; c++) cq->heap[c] = new_heap_t (heap_size);
+  for (c = 0; c < n_query; c++) { cq->heap[c] = new_heap_t (heap_size); cq->heap[c]->max_incompatible = cq->max_incompatible;}
 
   return cq;
 }
