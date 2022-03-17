@@ -26,7 +26,7 @@ typedef struct
 
 struct queue_struct
 {
-  int max_incompatible, n_query, n_ref, *res; 
+  int max_incompatible, n_query, n_ref, *res, *non_n; 
   heap_t *heap;
   size_t trim;
   bool *is_best;
@@ -137,7 +137,7 @@ print_usage (arg_parameters params, char *progname)
 int
 main (int argc, char **argv)
 {
-  int j, c, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 50000;
+  int j, c, n_invalid = 0, non_n_ref, count = 0, n_clust = 256, n_output = 0, print_interval = 10000;
   bool end_of_file = false;
   int64_t time0[2], time1[2];
   double elapsed = 0.;
@@ -203,7 +203,9 @@ main (int argc, char **argv)
   non_n_ref = (int)(query->aln->nchar * params.ambig_r->dval[0]);
 
   /* 2. read alignment files (can be several) and fill pool of cluster queues */
-  fprintf (stderr, "\nNext step is main comparison, which may take a while\n\n"); 
+  fprintf (stderr, "\n Notice that the number of sites used in the comparisons (i.e. non-indel and non-N in at least one query) is %d, and the total alignment length is %d",
+           query->n_idx + query->n_idx_c, query->aln->nchar); 
+  fprintf (stderr, "\n The next step is main comparison, which may take a while\n\n"); 
   count = n_invalid = 0;
 
   for (j = 0; j < params.ref->count; j++) {
@@ -215,7 +217,8 @@ main (int argc, char **argv)
       for (c = 0; c < cq->n_ref; c++) { // reads n_clust sequences
         if (readfasta_next (rfas) >= 0) {
           count++;
-          if (quick_count_sequence_non_N (rfas->seq, rfas->seqlength) < non_n_ref) {
+          cq->non_n[c] = quick_count_sequence_non_N (rfas->seq, rfas->seqlength);
+          if (cq->non_n[c] < non_n_ref) {
             if (rfas->seq) free (rfas->seq);
             if (rfas->name) free (rfas->name);
             rfas->seq = rfas->name = cq->seq[c] = cq->name[c] = NULL;
@@ -273,7 +276,8 @@ main (int argc, char **argv)
 
       if ((count >= print_interval) && ((count % print_interval) < cq->n_ref)) {
         elapsed = biomcmc_update_elapsed_time (time1); 
-        fprintf (stderr, "%d sequences analysed in total, %d saved, %d rejected due to high ambiguity; %.3lf secs passed since\n", count, n_output, n_invalid, elapsed); 
+        fprintf (stderr, "Cummulative: %d sequences analysed, %d saved, %d rejected (too ambiguous). Highest number of ACGT mismatches = %d in current neighbourhood. %.3lf secs elapsed\n", 
+                 count, n_output, n_invalid, cq->max_incompatible, elapsed); 
         fflush(stderr);
       }
 
@@ -323,10 +327,11 @@ new_queue (int n_ref, int n_query, int heap_size, size_t trim)
   cq->max_incompatible = 0xffffff;
 
   cq->res    = (int*)   biomcmc_malloc (4 * n_ref * sizeof (int)); // each ref seq against query->consensus
+  cq->non_n  = (int*)   biomcmc_malloc (n_ref * sizeof (int)); // non-n (i.e. ACGT etc.) sites 
   cq->seq    = (char**) biomcmc_malloc (n_ref * sizeof (char*)); // only pointer, actual seq is allocated by readfasta
   cq->name   = (char**) biomcmc_malloc (n_ref * sizeof (char*)); // only pointer '' '' ''
   cq->is_best = (bool*) biomcmc_malloc (n_ref * n_query * sizeof (bool*));
-  for (c = 0; c < n_ref; c++) { cq->seq[c] = cq->name[c] = NULL;}
+  for (c = 0; c < n_ref; c++) { cq->seq[c] = cq->name[c] = NULL; cq->non_n[c] = 0;}
   for (c = 0; c < n_ref * n_query ; c++) cq->is_best[c] = 0;
   for (c = 0; c < n_ref * 4; c++) cq->res[c] = 0;
 
@@ -355,6 +360,7 @@ del_queue (queue_t cq)
   }
   if (cq->is_best) free (cq->is_best);
   if (cq->res) free (cq->res);
+  if (cq->non_n) free (cq->non_n);
   free (cq);
   return;
 }
@@ -374,28 +380,39 @@ save_sequence_to_compress_stream (file_compress_t xz, char *seq, size_t seq_l, c
 void
 queue_distance_to_consensus (query_t query, queue_t cq, int ir)
 {
-  biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->consensus, query->n_idx_c, cq->max_incompatible, cq->res + 4 * ir, (int*) query->idx_c);
+  //double res[5]; // DEBUG
+  //biomcmc_pairwise_score_matches (cq->seq[ir], query->consensus, query->aln->nchar, res); // DEBUG
+  biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->consensus, query->n_idx_c, cq->max_incompatible, cq->res + 4 * ir, query->idx_c);
+  //biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->consensus, query->n_idx_c, query->n_idx_c, cq->res + 4 * ir, query->idx_c);
+  //printf ("DEBUG::%s \t %lf %lf %lf | %d %d\n", cq->name[ir], res[0], res[3], res[4], cq->res[4*ir], cq->res[4*ir + 3]);
 }
 
 void
 queue_update_min_heaps (query_t query, int iq, queue_t cq, int ir)
 { // compare query iq with reference ir
   q_item this;
-  int current_incompatible = cq->res[4*ir + 3] - cq->res[4*ir + 2]; // number of mismatches between this ref and query->consensus;
+  int result[4];
+  //int current_incompatible = query->n_idx + query->n_idx_c - cq->res[4*ir + 0]; // number of mismatches between this ref and query->consensus;
+  int current_incompatible = cq->res[4*ir + 3] - cq->res[4*ir + 0]; // number of mismatches between this ref and query->consensus;
   this.name = NULL;
 
-  if (current_incompatible > cq->heap[iq]->max_incompatible) return; // this reference is already too far from the query
+  if (current_incompatible >= cq->heap[iq]->max_incompatible) return; // this reference is already too far from the query
   current_incompatible = cq->heap[iq]->max_incompatible - current_incompatible; // decrease tolerance, since ref is already "current_incompatible" SNPs away from consensus (and thus, query)
 
-  biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->aln->character->string[iq], query->n_idx, current_incompatible, this.score, (int*) query->idx);
-  if ((this.score[3] - this.score[2]) >= current_incompatible) return; // too far from query
+  biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->aln->character->string[iq], query->n_idx, current_incompatible, result, query->idx);
+  //biomcmc_pairwise_score_matches_truncated_idx (cq->seq[ir], query->aln->character->string[iq], query->n_idx, query->n_idx, result, query->idx);
+  if ((result[3] - result[0]) >= current_incompatible) return; // too far from query (BTW r[3]-r[0] is same equation used by biomcmc_pairwise())
 
-  for (int i = 0; i < 4; i++) this.score[i] += cq->res[4*ir + i]; // score (ref) = score(ref,consensus) + score(ref, this query)
+  /* we accumulate first 4 scores between this query and consensus (the 4 scores come from biomcmc_pairwise) */
+  for (int i = 0; i < 4; i++) this.score[i] = result[i] + cq->res[4*ir + i]; // score (ref) = score(ref,consensus) + score(ref, this query)
+  this.score[4] = result[0]; // 5th score is unique matches at this sequence (so refs more distant from consensus query are preferred)  
+  this.score[5] = cq->non_n[ir]; // last (6th) score is the number of valid sites (i.e. excluding indels and Ns) WARNING: can bias towards labs which impute sites
   this.name = cq->name[ir]; // just a pointer (heap_insert copies if necessary)
 
   if (heap_insert (cq->heap[iq], this)) { // ref ir is within min_heap for query iq
     cq->is_best[cq->n_query * ir + iq] = 1; // onedim [n_ref][n_query]
     if (cq->heap[iq]->n == cq->heap[iq]->heap_size) // heap is full (o.w. the first element might already be best and we'd never fill it)
+      //cq->heap[iq]->max_incompatible = query->n_idx + query->n_idx_c - cq->heap[iq]->seq[1].score[0] + 1; // seq[1] contains the worse distance (amongst the best)
       cq->heap[iq]->max_incompatible = cq->heap[iq]->seq[1].score[3] - cq->heap[iq]->seq[1].score[0] + 1; // seq[1] contains the worse distance (amongst the best)
   }
 } 
@@ -409,17 +426,17 @@ save_distance_table (queue_t cq, query_t query, char *filename)
   size_t buf_len = 128;
 
   buffer = (char*) biomcmc_malloc (buf_len * sizeof (char));
-  sprintf (buffer, "query,reference,rank,ACGT_matches,text_matches,partial_matches,valid_sites\n");
+  sprintf (buffer, "query,reference,rank,ACGT_matches,text_matches,partial_matches,valid_pair_comparisons,ACGT_matches_unique,valid_ref_sites\n");
   if (biomcmc_write_compress (xz, buffer) != (int) strlen(buffer)) biomcmc_warning ("problem saving header of compressed file %s;", xz->filename);
 
   for (i = 0; i < cq->n_query; i++) {
     heap_finalise_heap_qsort (cq->heap[i]); // sort 
     for (j = 0; j < cq->heap[i]->heap_size; j++) {
-      buf_len = strlen (cq->heap[i]->seq[j].name) + query->aln->taxlabel->nchars[i] + 64;
+      buf_len = strlen (cq->heap[i]->seq[j].name) + query->aln->taxlabel->nchars[i] + 80;
       buffer = (char*) biomcmc_realloc ((char*) buffer, buf_len * sizeof (char));
       buffer[0] = '\0';
       sprintf (buffer, "%s,%s,%d", query->aln->taxlabel->string[i], cq->heap[i]->seq[j].name,j+1);
-      for (k=0; k < 4; k++) sprintf (buffer + strlen(buffer), ",%d", cq->heap[i]->seq[j].score[k]); // +strlen() to go to last position, o.w. overwrites
+      for (k=0; k < 6; k++) sprintf (buffer + strlen(buffer), ",%d", cq->heap[i]->seq[j].score[k]); // +strlen() to go to last position, o.w. overwrites
       sprintf (buffer + strlen(buffer), "\n");
       if (biomcmc_write_compress (xz, buffer) != (int) strlen(buffer)) errors++; 
       if (buffer) free (buffer);

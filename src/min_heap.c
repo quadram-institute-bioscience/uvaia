@@ -4,7 +4,7 @@
 
 #include "min_heap.h"
 
-#define N_SCORES 4
+#define N_SCORES 6  // don't forget to change the "return zero" in remove_worse() 
 
 int compare_q_item_score (int *a, int *b);
 static void heap_bubble_down (heap_t pq, int p);
@@ -83,7 +83,7 @@ q_item
 heap_remove_worse (heap_t pq) // a.k.a. pop() maximum in a min_heap
 {
   q_item max = pq->seq[1]; //the root is the maximum element (max mismatches, using our "min" logic)
-  if (pq->n == 0) return (q_item) {.name=NULL, .score={0,0,0,0}};
+  if (pq->n == 0) return (q_item) {.name=NULL, .score={0,0,0,0,0,0}};
   pq->seq[1] = pq->seq[pq->n]; // replace the element at the top with last element in the heap
   pq->n--; 
   heap_bubble_down (pq, 1);
@@ -92,7 +92,7 @@ heap_remove_worse (heap_t pq) // a.k.a. pop() maximum in a min_heap
 
 bool
 heap_insert (heap_t pq, q_item item) // item is a struct, not a pointer
-{ // FIXME: malloc hell
+{ 
   if (pq->n == pq->heap_size) { // replace if smaller than maximum
     if (compare_q_item_score (item.score, pq->seq[1].score) < 0) { // item has better score than the worst in heap
       //pq->seq[1].name = (char*) biomcmc_realloc ((char*) pq->seq[1].name, strlen(item.name) * sizeof (char));

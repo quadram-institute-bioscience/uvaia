@@ -13,7 +13,7 @@ typedef struct heap_struct* heap_t;
 
 typedef struct
 {
-  int score[4];
+  int score[6];
   char *name;
 } q_item;
 

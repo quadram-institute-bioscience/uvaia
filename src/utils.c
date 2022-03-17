@@ -253,12 +253,14 @@ return_query_aligned (int pattern_length, char* text, int text_length, edit_ciga
 }
 
 static uint8_t is_acgt[256] = {0xff};
+static uint8_t is_indel[256] = {0xff};
 
 void
 initialise_acgt (void)
 {
-  for (int i = 0; i < 256; i++) is_acgt[i] = 0;
+  for (int i = 0; i < 256; i++) is_acgt[i] = is_indel[i] = 0;
   is_acgt['A'] = is_acgt['C'] = is_acgt['G'] = is_acgt['T'] = is_acgt['a'] = is_acgt['c'] = is_acgt['g'] = is_acgt['t'] = 1;
+  is_indel['N'] = is_indel['n'] = is_indel['X'] = is_indel['x'] = is_indel['-'] = is_indel['?'] = is_indel['O'] = is_indel['o']  = is_indel['.'] = 1;
 }
 
 bool
@@ -269,9 +271,21 @@ is_site_acgt_distinct_pair (char s1, char s2) // relies on external call to init
 }
 
 bool
+is_site_pair_valid (char s1, char s2) // relies on external call to initialise_acgt()
+{
+  return ((!is_indel[(int)s1]) && (!is_indel[(int)s2]));
+}
+
+bool
 is_site_acgt (char s1) // relies on external call to initialise_acgt()
 {
   return (bool) is_acgt[(int)s1];
+}
+
+bool
+is_site_valid (char s1) // relies on external call to initialise_acgt()
+{
+  return (bool) !is_indel[(int)s1];
 }
 
 void // not used (copied from first pilot "search_u.c" )

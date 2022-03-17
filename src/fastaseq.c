@@ -527,7 +527,7 @@ quick_pairwise_score_reference (char *s1, char *s2, int nsites, int *score, int 
   for (i = 1; i <= n_score; i++) score[i] = -1; 
 
   for (i=0; i < nsites; i++) {
-    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
+    if (!is_site_pair_valid(s1[i], s2[i])) continue; // skip this column
     score[0]++;
     if (s1[i] == s2[i]) score[0]--;
     else counter[i]++; // SNP wrt reference (i.e. valid pair, which disagrees
@@ -543,7 +543,7 @@ quick_pairwise_score_truncated (char *s1, char *s2, int nsites, int maxdist, int
   score[0] = 0;
 
   for (i=0; (i < nsites) && (score[0] < maxdist); i++) {
-    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
+    if (!is_site_pair_valid(s1[i], s2[i])) continue; // skip this column
     score[0]++;
     if (s1[i] == s2[i]) score[0]--;
   }
@@ -566,7 +566,7 @@ quick_pairwise_score_truncated_idx_indelcheck (char *s1, char *s2, size_t nsites
   score[0] = 0;
   for (j=0; (j < nsites) && (score[0] < maxdist); j++) {
     i = idx[j];
-    if ((s1[i] == 'N') || (s2[i] == 'N') || (s1[i] == '-') || (s2[i] == '-') || (s1[i] == '?') || (s2[i] == '?')) continue; // skip this column
+    if (!is_site_pair_valid(s1[i], s2[i])) continue; // skip this column
     score[0]++;
     if (s1[i] == s2[i]) score[0]--;
   }
@@ -629,8 +629,8 @@ left_is_resolved_right_acgt (char *s1, char *s2, size_t nsites, size_t *idx)
 int
 quick_count_sequence_non_N (char *s, size_t nsites)
 {
-  int non_n = nsites;
-  for (size_t i = 0; i < nsites; i++) if ((s[i] == 'N') || (s[i] == '-') || (s[i] == '?') || (s[i] == 'X') || (s[i] == 'O') || (s[i] == '.')) non_n--;
+  int non_n = 0;
+  for (size_t i = 0; i < nsites; i++) non_n += (int) is_site_valid (s[i]);
   return non_n;
 }
 
@@ -723,7 +723,7 @@ create_query_indices (query_t qu)
   }
   else for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
     s2 = qu->aln->character->string[j][i];
-    if ( (s2 == 'N') || (s2 == '-') || (s2 == '?')) continue; // skip this column (only difference from loop above, acgt)
+    if (!is_site_valid(s2)) continue; // skip this column (only difference from loop above, acgt)
     if (qu->consensus[i] == 'N') qu->consensus[i] = s2; // consensus is missing info, will receive wathever state is from alignment
     else if (qu->consensus[i] != s2) qu->consensus[i] = '#';
   }
