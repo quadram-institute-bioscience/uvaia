@@ -263,29 +263,35 @@ initialise_acgt (void)
   is_indel['N'] = is_indel['n'] = is_indel['X'] = is_indel['x'] = is_indel['-'] = is_indel['?'] = is_indel['O'] = is_indel['o']  = is_indel['.'] = 1;
 }
 
-bool
+int
 is_site_acgt_distinct_pair (char s1, char s2) // relies on external call to initialise_acgt()
 {
-  if ((!is_acgt[(int)s1]) || (!is_acgt[(int)s2])) return false;
-  return (toupper(s1) != toupper(s2));
+  if ((!is_acgt[(int)s1]) || (!is_acgt[(int)s2])) return 0;
+  return (s1 != s2); // assume toupper()
 }
 
-bool
+int
+is_site_acgt_pair_valid (char s1, char s2) // relies on external call to initialise_acgt()
+{
+  return ((is_acgt[(int)s1]) && (is_acgt[(int)s2]));
+}
+
+int
 is_site_pair_valid (char s1, char s2) // relies on external call to initialise_acgt()
 {
   return ((!is_indel[(int)s1]) && (!is_indel[(int)s2]));
 }
 
-bool
+int
 is_site_acgt (char s1) // relies on external call to initialise_acgt()
 {
-  return (bool) is_acgt[(int)s1];
+  return (int) is_acgt[(int)s1];
 }
 
-bool
+int
 is_site_valid (char s1) // relies on external call to initialise_acgt()
 {
-  return (bool) !is_indel[(int)s1];
+  return (int) !is_indel[(int)s1];
 }
 
 void // not used (copied from first pilot "search_u.c" )

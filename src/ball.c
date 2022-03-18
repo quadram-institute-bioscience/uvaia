@@ -181,16 +181,14 @@ main (int argc, char **argv)
   create_query_indices (query);
   reorder_query_structure (query); // from lower to higher resolution (seqs with more Ns first)
 
-  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (used in comparisons) ", query->n_idx, query->n_idx_c); 
-  if (query->acgt) fprintf (stderr, "by focusing on ACGT differences only. \n"); 
-  else fprintf (stderr, "by focusing on text match (excluding only indels and Ns).\n"); 
+  if (query->acgt) fprintf (stderr, "Only ACGT differences are taken into account. \n"); 
+  else fprintf (stderr, "Partial matches are taken into account (excluding only gaps and Ns).\n"); 
   fflush(stderr);
 
   exclude_redundant_query_sequences (query, params.hires->count);
   fprintf (stderr, "Query database now composed of %d valid references, after removing redundant (%s resolved) sequences.\n", 
            query->aln->ntax, (params.hires->count? "less":"more"));
   create_query_indices (query);
-  fprintf (stderr, "Query sequences have %d segregating and %d non-segregating sites (both of which are used in comparisons), after removing redundancy\n", query->n_idx, query->n_idx_c); 
   fflush(stderr);
 
   /* 1.2 several ref sequences per thread (i.e. total n_clust read at once, distributed over threads), with char pointers etc*/

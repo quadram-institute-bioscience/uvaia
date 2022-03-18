@@ -42,8 +42,8 @@ struct query_struct
 {
   alignment aln;
   char *consensus;
-  size_t *idx_c, *idx, trim;
-  int n_idx_c, n_idx, dist;
+  size_t *idx_c, *idx_m, *idx, trim; // idx_consensus (strictly same base present in all), idx_missing (consensus, but a gap/invalid in some sequence), idx_unique (must verify each query)
+  int n_idx_c, n_idx_m, n_idx, dist;
   bool acgt;
 };
 
@@ -71,6 +71,7 @@ int readfasta_next (readfasta_t rfas);
 void del_readfasta (readfasta_t rfas);
 int accumulate_reference_sequence (char **ref, char *s, size_t nsites);
 int replace_Ns_from_reference (char *ref, size_t nsites);
+void quick_pairwise_score_acgt_and_valid (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx); // the others are used internally, tis the only one used upstream
 int quick_count_sequence_non_N (char *s, size_t nsites);
 
 /* for uvaia_ball */

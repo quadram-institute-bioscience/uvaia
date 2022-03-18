@@ -130,6 +130,76 @@ The complete syntax is:
 Both the database of aligned sequences and the set of aligned query sequences can be compressed files (xz, bz, gz). 
 This program uses a lot of memory since it stores the whole (uncompressed) database in memory.
 
+### uvaiann
+This is still experimental, but will likely replace `uvaia` (as soon as I finish benchmarking). It uses priority queues
+(called `min_heap` internally) to store, for each query sequence, only the best scoring references. It assumes that the
+database of reference sequences is too large to fit into memory, and thus we read the (possibly compressed) reference
+alignment in batches, keeping only their names in memory and dumping all sequences that _at some point_ belonged to the
+set. Thus in the beginning the software saves a lot of reference sequences which may not be very close to the query
+sequences, and later it updates the output alignment less often, with closer sequences only. 
+
+It runs in parallel using all available processors (in the future the user should be able to modify it), and it relies
+on a "compression" of the query sequences into variable sites and common variants. It can also remove redundant
+sequences, i.e. those identical to or equivalent but with fewer unambiguous sites with another.
+
+Unlike other distance calculation software, it actually calculates the number of matches between sequences as well as
+the number of valid pairwise comparisons. The distance is the difference between these two quantities. 
+It sorts neighbours in the same order as the table columns, using the next column to break ties:
+
+1. *ACGT_matches*: considering only ACGT 
+2. *text_matches*:  exact matches, thus M-M is a match but M-A is not
+3. *partial_matches*: M-A is considered a match since the partially ambiguous `M` equals {A,C}. However the fully ambiguous `N` is neglected
+4. *valid_pair_comparisons*: the `effective` sequence length for the comparison, i.e. sum of sites without gaps or N in any of the two sequences
+5. *ACGT_matches_unique*: a 'consensus' between query seqs is created, and this is the number of matches present in the query but not in the consensus 
+(in short, it prefers neighbours farther from the common ancestor of the queries, in case of ties)
+6. *valid_ref_sites*: if everything else is the same, then sequences with less gaps and Ns are preferred (caveat is that some sequencing labs 
+artificially impute states, in practice removing all gaps and Ns)
+ 
+The columns 1, 3, and 4 above are the most useful for the final user.
+
+The reported number of matches may differ between programs or runs due to how the query sequences are compressed and indexed, 
+however the distances (mismatches) are preserved.
+For instance `valid_pair_comparison` - `partial_matches` generates similar distances as [snp-dists](https://github.com/tseemann/snp-dists).
+This is because [snp-dists](https://github.com/tseemann/snp-dists) excludes every non-ACGT, even partially informative sites, and counts only ACGT.
+Here, sites with a gap or `N` in one of the sequences are ignored, while partially informative sites (e.g. `M` or `R`)
+are included. 
+
+The example sequences below illustrate the difference between them. All 3 sequences have 7 valid sites, since we exclude `N` and `-`:
+```
+seq1  AAC GTT A--    7 valid sites: 7 x ACGT + 0 partial
+seq2  AAC G-T AM-    7 valid sites: 6 x ACGT + 1 partial (M)
+seq3  MNC GTT MC-    7 valid sites: 5 x ACGT + 2 partial (M) 
+
+ACGT_matches (seq1,seq2) = 6   partial_matches (seq1,seq2) = 6   valid_pair_comparisons(seq1,seq2) = 6
+ACGT_matches (seq1,seq3) = 4   partial_matches (seq1,seq3) = 6   valid_pair_comparisons(seq1,seq3) = 6 
+ACGT_matches (seq2,seq3) = 3   partial_matches (seq2,seq3) = 6   valid_pair_comparisons(seq2,seq3) = 6
+```
+So, although all sequences have a distance of zero from each other (no mismatches), they are not identical, and these
+differences are relevant phylogenetically.
+This is how `uvaia` and other software (in our example, snp-dists) see the sequences, remembering that only columns
+where neither sequence has a `-` are considered:
+```
+      uvaia          snp-dists
+seq1  AAC GTT A--    AAC GTT A--
+seq2  AAC G-T AM-    AAC G-T A--
+seq3  M-C GTT MC-    --C GTT -C-
+```
+I hope this example helps seeing why the difference between `valid_pair_comparison` and `partial_matches` (from uvaia)
+is usually equivalent to the number of ACGT mismatches (the default distances produced by `snp-dists`).
+They do disagree if for instance *seq3* were instead `KNC GTT KC-`, since the snp-dists distance would be zero (`K`
+is neglected, as is `M`), but uvaia knows that `K={G,T}` which is incompatible (and thus a mismatch) with `A` or `M={A,C}`.
+
+Usually uvaia should be used to find neighbouring sequences which will be used in downstream phylogenetic analysis.
+Thus it keeps track of these several measures of similarity: in the limit, two very poor sequences with many gaps
+and very few columns in common (e.g. `------AAA` and `CCC------`) have no mismatches! 
+
+However, **if you do want to reproduce other software behaviour and consider only As,Cs,Gs, and Ts**, there is an option
+conveniently invoked as `--acgt`. With this option, it still tracks the matches but considering partially informative
+sites (e.g. `M` or `K` together with gaps and `N`s. The output table will be a bit different, with two extra columns
+describing the distance (mismatches) from the reference to the consensus columns of the query, and the distance using
+the "unique" (polymorphic) columns. If you are confused, don't worry and just use their sum as the "SNP distance". 
+Or the difference between the number of valid comparisons and the number of matches, as usual.
+
 ### uvaiaclust (experimental)
 Removal of redundant sequences based on a single-distance canopy clustering: each new sequence will be merged into the
 first cluster s.t. its distance is smaller than the threshold. Each cluster is represented by its most resolved sequence

@@ -18,9 +18,10 @@ char *return_query_aligned (int pattern_length, char* text, int text_length, edi
 void upper_kseq (char *s, unsigned l);
 
 void initialise_acgt (void);
-bool is_site_acgt_distinct_pair (char s1, char s2); // relies on external call to initialise_acgt()
-bool is_site_pair_valid (char s1, char s2);  // true iff both are non-n; relies on external call to initialise_acgt()
-bool is_site_acgt (char s1); // relies on external call to initialise_acgt()
-bool is_site_valid (char s1); // returns true if site is not N or indel; relies on external call to initialise_acgt()
+int is_site_acgt_distinct_pair (char s1, char s2); // relies on external call to initialise_acgt()
+int is_site_acgt_pair_valid (char s1, char s2); // true if both are ACGT; relies on external call to initialise_acgt()
+int is_site_pair_valid (char s1, char s2);  // true iff both are non-n; relies on external call to initialise_acgt()
+int is_site_acgt (char s1); // relies on external call to initialise_acgt()
+int is_site_valid (char s1); // returns true if site is not N or indel; relies on external call to initialise_acgt()
 
 #endif

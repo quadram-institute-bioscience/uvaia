@@ -578,7 +578,20 @@ quick_pairwise_score_acgt (char *s1, char *s2, size_t nsites, int maxdist, int *
 { // assumes upper(), and just count acgt matches; relies on call to initialise_acgt() from utils.c
   size_t j;
   score[0] = 0;
-  for (j=0; (j < nsites) && (score[0] < maxdist); j++) score[0] += (int) is_site_acgt_distinct_pair (s1[idx[j]], s2[idx[j]]);
+  for (j=0; (j < nsites) && (score[0] < maxdist); j++) score[0] += is_site_acgt_distinct_pair (s1[idx[j]], s2[idx[j]]);
+  return;
+}
+
+void
+quick_pairwise_score_acgt_and_valid (char *s1, char *s2, size_t nsites, int maxdist, int *score, size_t *idx)
+{ // assumes upper(), and just count acgt matches; relies on call to initialise_acgt() from utils.c
+  size_t j;
+  score[0] = score[1] = 0;
+  
+  for (j=0; (j < nsites) && (score[0] < maxdist); j++) {
+    score[0] += is_site_acgt_distinct_pair (s1[idx[j]], s2[idx[j]]);
+    score[1] += is_site_acgt_pair_valid (s1[idx[j]], s2[idx[j]]);
+  }
   return;
 }
 
@@ -587,10 +600,10 @@ left_is_resolved_right (char *s1, char *s2, size_t nsites, size_t *idx)
 { // minus one if left is resolved, plus one if right is resolved, zero if identical and larger than one if distinct
   size_t j;
   int score = 0;
-  bool snp1, snp2;
+  int snp1, snp2;
   for (j=0; (j < nsites) && (score < 0xff); j++) {
-    snp1 = !((s1[idx[j]] == 'N') || (s1[idx[j]] == '-') || (s1[idx[j]] == '?')); // snp1 = 1 if not a space; 0 o.w.
-    snp2 = !((s2[idx[j]] == 'N') || (s2[idx[j]] == '-') || (s2[idx[j]] == '?'));
+    snp1 = is_site_valid (s1[idx[j]]); // snp1 = 1 if not a space; 0 o.w.
+    snp2 = is_site_valid (s2[idx[j]]);
     if (snp1 == snp2) continue; // both indels or both SNPs (we assume same SNP, if called properly after calculating distance)
     if (snp1 > snp2) { 
       if (score > 0) return 0xff; // s2 was more resolved, i.e. more ACGTs, but here the ACGT is on s1 (so they're not equivalent)
@@ -609,7 +622,7 @@ left_is_resolved_right_acgt (char *s1, char *s2, size_t nsites, size_t *idx)
 { // minus one if left is resolved, plus one if right is resolved, zero if identical and larger than one if distinct
   size_t j;
   int score = 0;
-  bool snp1, snp2;
+  int snp1, snp2;
   for (j=0; (j < nsites) && (score < 0xff); j++) {
     snp1 = is_site_acgt(s1[idx[j]]);
     snp2 = is_site_acgt(s2[idx[j]]);
@@ -630,7 +643,7 @@ int
 quick_count_sequence_non_N (char *s, size_t nsites)
 {
   int non_n = 0;
-  for (size_t i = 0; i < nsites; i++) non_n += (int) is_site_valid (s[i]);
+  for (size_t i = 0; i < nsites; i++) non_n += is_site_valid (s[i]);
   return non_n;
 }
 
@@ -638,7 +651,7 @@ int
 quick_count_sequence_acgt (char *s, size_t nsites)
 {
   int non_n = 0;
-  for (size_t i = 0; i < nsites; i++) non_n += (int) is_site_acgt (s[i]);
+  for (size_t i = 0; i < nsites; i++) non_n += is_site_acgt (s[i]);
   return non_n;
 }
 
@@ -649,9 +662,15 @@ seq_ball_against_query_structure (char **seq, int *min_dist, int ball_radius, qu
 {
   int i, c_dist=0;
   if (qu->acgt) {
-    quick_pairwise_score_acgt (*seq, qu->consensus, qu->n_idx_c, ball_radius, min_dist, qu->idx_c);
+    quick_pairwise_score_acgt (*seq, qu->consensus, qu->n_idx_c, ball_radius, min_dist, qu->idx_c); // identical across queries
     if (*min_dist >= ball_radius) return;
     c_dist = *min_dist;
+
+    quick_pairwise_score_acgt (*seq, qu->consensus, qu->n_idx_m, ball_radius, min_dist, qu->idx_m); // same base or gap (which doesnt contribute to mismatch)
+    *min_dist += c_dist;
+    if (*min_dist >= ball_radius) return; // *min_dist must be up-to-date since calling function needs it; c_dist is the partial sum
+    c_dist = *min_dist;
+
     for (i = 0; (i < qu->aln->ntax) && ((*min_dist + c_dist) >= ball_radius); i++) { 
       quick_pairwise_score_acgt (*seq, qu->aln->character->string[i], qu->n_idx, ball_radius - c_dist, min_dist, qu->idx);
     }
@@ -662,6 +681,12 @@ seq_ball_against_query_structure (char **seq, int *min_dist, int ball_radius, qu
     quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->consensus, qu->n_idx_c, ball_radius, min_dist, qu->idx_c);
     if (*min_dist >= ball_radius) return;
     c_dist = *min_dist;
+
+    quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->consensus, qu->n_idx_m, ball_radius, min_dist, qu->idx_m);
+    *min_dist += c_dist;
+    if (*min_dist >= ball_radius) return;
+    c_dist = *min_dist;
+
     for (i = 0; (i < qu->aln->ntax) && ((*min_dist + c_dist) >= ball_radius); i++) { 
       quick_pairwise_score_truncated_idx_indelcheck (*seq, qu->aln->character->string[i], qu->n_idx, ball_radius - c_dist, min_dist, qu->idx);
     }
@@ -675,13 +700,11 @@ new_query_structure_from_fasta (char *filename, int trim, int dist, int acgt)
 {
  query_t qu = (query_t) biomcmc_malloc (sizeof (struct query_struct));
   qu->consensus = NULL;
-  qu->idx_c = qu->idx = NULL;
-  qu->n_idx_c = qu->n_idx = 0;
+  qu->idx_c = qu->idx_m = qu->idx = NULL; // consensus (constant,no gaps), missing (constant with gaps), and others (unique or polymorphic)
+  qu->n_idx_c = qu->n_idx_m = qu->n_idx = 0;
   qu->acgt = (bool) acgt;
  
   qu->aln = read_fasta_alignment_from_file (filename, 0xf); // 0xf -> neither true or false, but gets only bare alignment info
-  //int i,j;
-  //for (i=0;i<30;i++) {for (j=0;j<30;j++) printf("%c",qu->aln->character->string[i][j]); printf ("\n"); }
   
   /* check if parameters (trim, min_dist) are compatible with sequence lenght */
   if (trim < 0) trim = 0; // lower bound is zero (default value); params.trim is an int but we need size_t (cq->trim)
@@ -700,6 +723,7 @@ del_query_structure (query_t qu)
   if (!qu) return;
   if (qu->consensus) free (qu->consensus);
   if (qu->idx_c) free (qu->idx_c);
+  if (qu->idx_m) free (qu->idx_m);
   if (qu->idx) free (qu->idx);
   del_alignment (qu->aln);
   free (qu);
@@ -710,40 +734,52 @@ create_query_indices (query_t qu)
 {
   int i,j;
   char s2;
+  bool *miss = NULL;
   initialise_acgt (); // from utils.c, has local vector 
 
   if (!qu->consensus) qu->consensus = (char*) biomcmc_malloc (qu->aln->nchar * sizeof (char)); // we may call this function more than once
-  for (i = 0; i < qu->aln->nchar; i++) qu->consensus[i] = 'N';
+  miss = (bool*) biomcmc_malloc (qu->aln->nchar * sizeof (bool)); // just to distinguish consensus sites with gaps
+  for (i = 0; i < qu->aln->nchar; i++) { qu->consensus[i] = 'N'; miss[i] = false; }
 
   if (qu->acgt) for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
     s2 = qu->aln->character->string[j][i];
-    if (!is_site_acgt (s2)) continue; // skip indels but also partially ambiguous, focusing on ACGT differences
-    if (qu->consensus[i] == 'N') qu->consensus[i] = s2; // consensus is missing info, will receive ACGT from alignment
+    if (!is_site_acgt (s2)) { miss[i] = true; continue; } // skip gaps and partially ambiguous; miss[] makes sure we don't assume all seqs have the consensus state
+    if (qu->consensus[i] == 'N') qu->consensus[i] = s2;   // consensus is missing info, will receive ACGT from alignment
     else if (qu->consensus[i] != s2) qu->consensus[i] = '#'; // ACGT info from consensus conflicts with current sequence
   }
   else for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) for (j = 0; (j < qu->aln->ntax) && (qu->consensus[i] != '#'); j++) {
     s2 = qu->aln->character->string[j][i];
-    if (!is_site_valid(s2)) continue; // skip this column (only difference from loop above, acgt)
-    if (qu->consensus[i] == 'N') qu->consensus[i] = s2; // consensus is missing info, will receive wathever state is from alignment
-    else if (qu->consensus[i] != s2) qu->consensus[i] = '#';
+    //miss[] is s.t. consensus knows the diff between "all A" and "all A or gap/indel", o.w. we may impute the consensus value to all queries
+    if (!is_site_valid(s2)) { miss[i] = true; continue; } // skip this column (btw this is only difference from loop above, acgt) 
+    if (qu->consensus[i] == 'N') qu->consensus[i] = s2;   // consensus is missing info, will receive wathever state is from alignment
+    else if (qu->consensus[i] != s2) qu->consensus[i] = '#'; // strict, character match to ensure any polymorphism is flagged
   }
 
   qu->idx_c = (size_t*) biomcmc_realloc ((size_t*) qu->idx_c, (qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
+  qu->idx_m = (size_t*) biomcmc_realloc ((size_t*) qu->idx_m, (qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
   qu->idx   = (size_t*) biomcmc_realloc ((size_t*) qu->idx,   (qu->aln->nchar - (int) qu->trim) * sizeof (size_t)); 
-  qu->n_idx_c = qu->n_idx = 0;
+  qu->n_idx_c = qu->n_idx_m = qu->n_idx = 0;
   
   for (i = (int) qu->trim; i < (qu->aln->nchar - (int) qu->trim); i++) if (qu->consensus[i] != 'N') {
-    if (qu->consensus[i] == '#') qu->idx[qu->n_idx++] = i; // polymorphic site; we need to check every alignment sequence
-    else                     qu->idx_c[qu->n_idx_c++] = i; // non-segregating site; enough to compare with consensus
+    if (qu->consensus[i] == '#') qu->idx[qu->n_idx++] = i; // polymorphic site; we need to check every alignment sequence even if some have gaps 
+    else {
+      if (miss[i]) qu->idx_m[qu->n_idx_m++] = i; // non-segregating site with some gaps; cannot assume query[i] == consensus[i] 
+      else         qu->idx_c[qu->n_idx_c++] = i; // non-segregating site, and no gaps; enough to compare with consensus
+    }
   }
   qu->idx_c = (size_t*) biomcmc_realloc ((size_t*) qu->idx_c, qu->n_idx_c * sizeof (size_t)); 
+  qu->idx_m = (size_t*) biomcmc_realloc ((size_t*) qu->idx_m, qu->n_idx_m * sizeof (size_t)); 
   qu->idx   = (size_t*) biomcmc_realloc ((size_t*) qu->idx,   qu->n_idx   * sizeof (size_t)); 
+  
+  fprintf (stderr, "Query sequence alignment: %d segregating, %d non-segregating sites with indels, and %d constant sites (all are used in comparisons)\n", 
+           qu->n_idx, qu->n_idx_m, qu->n_idx_c); 
+  if (miss) free (miss);
 }
 
 void
 reorder_query_structure (query_t qu)
 { // could use indices but this function is linear not quadratic on seqlength thus not critical
-  int i, *non_n; // non_n can be number of non-N or number of ACGT; and later used to store indices of best-to-worse 
+  int i, *non_n; // non_n can be number of non-N or number of ACGT; later is recycled to store indices of best-to-worse 
   empfreq e;
 
   non_n = (int*) biomcmc_malloc (qu->aln->ntax * sizeof (int));	
@@ -774,12 +810,12 @@ exclude_redundant_query_sequences (query_t qu, int keep_more_resolved)
       if (qu->acgt) { // first go over polymorphic sites (smaller set than non-polymorphic)
         red1 = left_is_resolved_right_acgt (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, qu->idx);
         if (red1 > 1) continue; // i and j are _not_ equivalent (one is not a more resolved version of the other, since both have unique SNPs)
-        red2 = left_is_resolved_right_acgt (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx_c, qu->idx_c);
+        red2 = left_is_resolved_right_acgt (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx_m, qu->idx_m);
       }
-      else {
+      else { // notice that red2 iterates over idx_m (that is, consensus with possibility of indel) since idx_c is completely identical in all samples
         red1 = left_is_resolved_right (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx, qu->idx);
         if (red1 > 1) continue; // i and j are _not_ equivalent (one is not a more resolved version of the other, since both have unique SNPs)
-        red2 = left_is_resolved_right (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx_c, qu->idx_c);
+        red2 = left_is_resolved_right (qu->aln->character->string[i], qu->aln->character->string[j], qu->n_idx_m, qu->idx_m);
       }
       if (red2 > 1) continue; // i and j are _not_ equivalent (one is not a more resolved version of the other, since both have unique SNPs)
       if ((!red1) && (!red2)) valid[j] = 0; // 1 and 2 are identical, even at the indels and Ns
