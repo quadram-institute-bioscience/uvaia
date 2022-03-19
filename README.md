@@ -176,7 +176,7 @@ ACGT_matches (seq2,seq3) = 3   partial_matches (seq2,seq3) = 6   valid_pair_comp
 ```
 So, although all sequences have a distance of zero from each other (no mismatches), they are not identical, and these
 differences are relevant phylogenetically.
-This is how `uvaia` and other software (in our example, snp-dists) see the sequences, remembering that only columns
+This highlights how `uvaia` and other software (in our example, snp-dists) see the sequences differently, remembering that only columns
 where neither sequence has a `-` are considered:
 ```
       uvaia          snp-dists
@@ -185,17 +185,23 @@ seq2  AAC G-T AM-    AAC G-T A--
 seq3  M-C GTT MC-    --C GTT -C-
 ```
 I hope this example helps seeing why the difference between `valid_pair_comparison` and `partial_matches` (from uvaia)
-is usually equivalent to the number of ACGT mismatches (the default distances produced by `snp-dists`).
+is usually close to the number of ACGT mismatches (the default distances produced by `snp-dists`).
 They do disagree if for instance *seq3* were instead `KNC GTT KC-`, since the snp-dists distance would be zero (`K`
 is neglected, as is `M`), but uvaia knows that `K={G,T}` which is incompatible (and thus a mismatch) with `A` or `M={A,C}`.
 
 Usually uvaia should be used to find neighbouring sequences which will be used in downstream phylogenetic analysis.
 Thus it keeps track of these several measures of similarity: in the limit, two very poor sequences with many gaps
-and very few columns in common (e.g. `------AAA` and `CCC------`) have no mismatches! 
+and very few columns in common (e.g. `------AAA` and `CCC------`) have no mismatches!
+The program periodically reports partial results, and it is not uncommon for the `Highest number of ACGT mismatches` to
+increase as the run progresses. This apparent contradiction is in line with our objective of tracking **matches** instead of **mismatches**,
+since a sequence pair with few mismatches may be due to too many ambiguous calls, and lower quality overall. And thus as
+the program runs, it finds other sequences with many more _valid_ comparisons, at the cost of a few extra mismatches.
+Furthermore the reported "highest number of mismatches" is the highest over query samples and neighbour sets, and 
+may be due to one or a few query sequences.
 
 However, **if you do want to reproduce other software behaviour and consider only As,Cs,Gs, and Ts**, there is an option
 conveniently invoked as `--acgt`. With this option, it still tracks the matches but considering partially informative
-sites (e.g. `M` or `K` together with gaps and `N`s. The output table will be a bit different, with two extra columns
+sites (e.g. `M` or `K`) together with gaps and `N`s. The output table will be a bit different, with two extra columns
 describing the distance (mismatches) from the reference to the consensus columns of the query, and the distance using
 the "unique" (polymorphic) columns. If you are confused, don't worry and just use their sum as the "SNP distance". 
 Or the difference between the number of valid comparisons and the number of matches, as usual.
