@@ -1,5 +1,5 @@
-{% set version="1.0.0" %}
-{% set revision="3651b5bb841d0eabea07d1531f61da376a87d1e4" %}
+{% set version="2.0.0" %}
+{% set revision="79049c7f9dbea281eb87eed50f387f17ee2ccfbb" %}
 
 package:
   name: uvaia 
@@ -17,23 +17,25 @@ build:
 requirements:
   build:
     - {{ compiler('c') }}
+    - sysroot_linux-64 2.17
     - automake
     - libtool
     - pkg-config
     - make
+  host: ## libs must match target platform, not build platform
+    - sysroot_linux-64 2.17
+    - libgcc-ng
     - check
     - zlib
     - xz
     - bzip2
-  host:
-    - check
-    - zlib
-    - xz
-    - bzip2
+    - libgomp
   run:
+    - sysroot_linux-64 2.17
     - zlib
     - xz
     - bzip2
+    - libgomp
 
 test:
   commands:

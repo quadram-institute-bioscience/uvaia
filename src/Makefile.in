@@ -88,9 +88,8 @@ PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
 host_triplet = @host@
-bin_PROGRAMS = uvaialign$(EXEEXT) uvaia_search_u$(EXEEXT) \
-	uvaia$(EXEEXT) uvaiaclust$(EXEEXT) uvaiaball$(EXEEXT) \
-	uvaiann$(EXEEXT)
+bin_PROGRAMS = uvaialign$(EXEEXT) uvaia$(EXEEXT) uvaiaclust$(EXEEXT) \
+	uvaiaball$(EXEEXT) uvaiann$(EXEEXT)
 subdir = src
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/m4/libtool.m4 \
@@ -121,9 +120,6 @@ AM_V_lt = $(am__v_lt_@AM_V@)
 am__v_lt_ = $(am__v_lt_@AM_DEFAULT_V@)
 am__v_lt_0 = --silent
 am__v_lt_1 = 
-am_uvaia_search_u_OBJECTS = search_u.$(OBJEXT)
-uvaia_search_u_OBJECTS = $(am_uvaia_search_u_OBJECTS)
-uvaia_search_u_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_uvaiaball_OBJECTS = ball.$(OBJEXT) utils.$(OBJEXT) \
 	fastaseq.$(OBJEXT)
 uvaiaball_OBJECTS = $(am_uvaiaball_OBJECTS)
@@ -173,12 +169,10 @@ AM_V_CCLD = $(am__v_CCLD_@AM_V@)
 am__v_CCLD_ = $(am__v_CCLD_@AM_DEFAULT_V@)
 am__v_CCLD_0 = @echo "  CCLD    " $@;
 am__v_CCLD_1 = 
-SOURCES = $(uvaia_SOURCES) $(uvaia_search_u_SOURCES) \
-	$(uvaiaball_SOURCES) $(uvaiaclust_SOURCES) \
+SOURCES = $(uvaia_SOURCES) $(uvaiaball_SOURCES) $(uvaiaclust_SOURCES) \
 	$(uvaialign_SOURCES) $(uvaiann_SOURCES)
-DIST_SOURCES = $(uvaia_SOURCES) $(uvaia_search_u_SOURCES) \
-	$(uvaiaball_SOURCES) $(uvaiaclust_SOURCES) \
-	$(uvaialign_SOURCES) $(uvaiann_SOURCES)
+DIST_SOURCES = $(uvaia_SOURCES) $(uvaiaball_SOURCES) \
+	$(uvaiaclust_SOURCES) $(uvaialign_SOURCES) $(uvaiann_SOURCES)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -347,8 +341,6 @@ AM_CPPFLAGS = $(GTKDEPS_CFLAGS) -I$(top_srcdir)/submodules/WFA -I$(top_srcdir)/@
 LDADD = $(top_builddir)/submodules/WFA/libwfa.la $(top_builddir)/@BIOMCMCLIB@/lib/libbiomcmc_static.la $(GTKDEPS_LIBS) @ZLIB_LIBS@ @LZMA_LIBS@ $(AM_LDFLAGS)
 uvaialign_SOURCES = align.c kseq.h
 uvaialign_LDADD = $(LDADD)
-uvaia_search_u_SOURCES = search_u.c kseq.h
-uvaia_search_u_LDADD = $(LDADD)
 uvaia_SOURCES = uvaia.c utils.c utils.h
 uvaia_LDADD = $(LDADD)
 uvaiaclust_SOURCES = cluster.c utils.c utils.h fastaseq.h fastaseq.c
@@ -370,9 +362,9 @@ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__confi
 	      exit 1;; \
 	  esac; \
 	done; \
-	echo ' cd $(top_srcdir) && $(AUTOMAKE) --gnu src/Makefile'; \
+	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign src/Makefile'; \
 	$(am__cd) $(top_srcdir) && \
-	  $(AUTOMAKE) --gnu src/Makefile
+	  $(AUTOMAKE) --foreign src/Makefile
 Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
 	@case '$?' in \
 	  *config.status*) \
@@ -444,10 +436,6 @@ uvaia$(EXEEXT): $(uvaia_OBJECTS) $(uvaia_DEPENDENCIES) $(EXTRA_uvaia_DEPENDENCIE
 	@rm -f uvaia$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(uvaia_OBJECTS) $(uvaia_LDADD) $(LIBS)
 
-uvaia_search_u$(EXEEXT): $(uvaia_search_u_OBJECTS) $(uvaia_search_u_DEPENDENCIES) $(EXTRA_uvaia_search_u_DEPENDENCIES) 
-	@rm -f uvaia_search_u$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(uvaia_search_u_OBJECTS) $(uvaia_search_u_LDADD) $(LIBS)
-
 uvaiaball$(EXEEXT): $(uvaiaball_OBJECTS) $(uvaiaball_DEPENDENCIES) $(EXTRA_uvaiaball_DEPENDENCIES) 
 	@rm -f uvaiaball$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(uvaiaball_OBJECTS) $(uvaiaball_LDADD) $(LIBS)
@@ -476,7 +464,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/fastaseq.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/min_heap.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/nearest.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/search_u.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/utils.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/uvaia.Po@am__quote@
 
