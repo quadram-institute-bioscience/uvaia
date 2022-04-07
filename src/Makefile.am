@@ -8,9 +8,6 @@ bin_PROGRAMS = uvaialign uvaia_search_u uvaia uvaiaclust uvaiaball uvaiann
 uvaialign_SOURCES = align.c kseq.h
 uvaialign_LDADD = $(LDADD)
 
-uvaia_search_u_SOURCES = search_u.c kseq.h
-uvaia_search_u_LDADD = $(LDADD)
-
 uvaia_SOURCES = uvaia.c utils.c utils.h
 uvaia_LDADD = $(LDADD)
 
