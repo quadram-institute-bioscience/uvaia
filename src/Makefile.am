@@ -5,7 +5,8 @@ AM_CFLAGS = @AM_CFLAGS@ @OPENMP_CFLAGS@ @ZLIB_CFLAGS@ @LZMA_CFLAGS@
 LDADD = $(top_builddir)/submodules/WFA/libwfa.la $(top_builddir)/@BIOMCMCLIB@/lib/libbiomcmc_static.la $(GTKDEPS_LIBS) @ZLIB_LIBS@ @LZMA_LIBS@ $(AM_LDFLAGS)
 
 bin_PROGRAMS = uvaialign uvaia uvaiaclust uvaiaball uvaiann
-uvaialign_SOURCES = align.c kseq.h
+
+uvaialign_SOURCES = align.c fastaseq.c fastaseq.h utils.c utils.h
 uvaialign_LDADD = $(LDADD)
 
 uvaia_SOURCES = uvaia.c utils.c utils.h

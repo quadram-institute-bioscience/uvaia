@@ -128,7 +128,8 @@ am_uvaiaclust_OBJECTS = cluster.$(OBJEXT) utils.$(OBJEXT) \
 	fastaseq.$(OBJEXT)
 uvaiaclust_OBJECTS = $(am_uvaiaclust_OBJECTS)
 uvaiaclust_DEPENDENCIES = $(am__DEPENDENCIES_2)
-am_uvaialign_OBJECTS = align.$(OBJEXT)
+am_uvaialign_OBJECTS = align.$(OBJEXT) fastaseq.$(OBJEXT) \
+	utils.$(OBJEXT)
 uvaialign_OBJECTS = $(am_uvaialign_OBJECTS)
 uvaialign_DEPENDENCIES = $(am__DEPENDENCIES_2)
 am_uvaiann_OBJECTS = nearest.$(OBJEXT) utils.$(OBJEXT) \
@@ -339,7 +340,7 @@ top_srcdir = @top_srcdir@
 # "-I$(srcdir)/../WFA"  means that "include <gap_affine/etc.h>" works (obs: top_srcdir is relative to root so dont need the ".."
 AM_CPPFLAGS = $(GTKDEPS_CFLAGS) -I$(top_srcdir)/submodules/WFA -I$(top_srcdir)/@BIOMCMCLIB@/lib @OPENMP_CPPFLAGS@ @ZLIB_CFLAGS@ @LZMA_CFLAGS@ 
 LDADD = $(top_builddir)/submodules/WFA/libwfa.la $(top_builddir)/@BIOMCMCLIB@/lib/libbiomcmc_static.la $(GTKDEPS_LIBS) @ZLIB_LIBS@ @LZMA_LIBS@ $(AM_LDFLAGS)
-uvaialign_SOURCES = align.c kseq.h
+uvaialign_SOURCES = align.c fastaseq.c fastaseq.h utils.c utils.h
 uvaialign_LDADD = $(LDADD)
 uvaia_SOURCES = uvaia.c utils.c utils.h
 uvaia_LDADD = $(LDADD)
