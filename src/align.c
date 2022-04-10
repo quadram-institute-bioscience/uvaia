@@ -47,7 +47,7 @@ get_parameters_from_argv (int argc, char **argv)
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .screen  = arg_litn(NULL,"stdout",0, 1, "print alignment to stdout (to redirect/pipe) instead of compress to file; much faster but may generate a big output"),
     .ambig   = arg_dbl0("a","ambiguity", NULL, "maximum allowed ambiguity for sequence to be excluded (default=0.5)"),
-    .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. how many query sequences are queued to be aligned in parallel (larger than number of threads, defaults to 64 per thread)"),
+    .pool    = arg_int0("p","pool", NULL, "How many query sequences are read in batch, to be aligned in parallel (should be larger than number of threads, defaults to 256 per thread)"),
     .ref     = arg_file1("r","reference", "<ref.fa|ref.fa.xz>", "reference sequence in fasta format, possibly compressed with gz, xz, bz2"),
     .fasta   = arg_filen(NULL, NULL, "<seqs.fa|seqs.fa.xz>", 1, 1024, "sequences to align in fasta format, possibly compressed with gz, xz, bz2 (can be multiple files)"),
     .threads = arg_int0("t","nthreads",NULL, "suggested number of threads (default is to let system decide; I may not honour your suggestion btw)"),
@@ -58,9 +58,9 @@ get_parameters_from_argv (int argc, char **argv)
   params.argtable = argtable; 
   params.ambig->dval[0] = 0.5;
 #ifdef _OPENMP
-  params.pool->ival[0] = 64 * omp_get_max_threads (); // default is to have quite a few
+  params.pool->ival[0] = 256 * omp_get_max_threads (); // default is to have quite a few
 #else
-  params.pool->ival[0] = 64;
+  params.pool->ival[0] = 256;
 #endif 
   /* actual parsing: */
   if (arg_nullcheck(params.argtable)) biomcmc_error ("Problem allocating memory for the argtable (command line arguments) structure");
@@ -103,7 +103,8 @@ print_usage (arg_parameters params, char *progname)
     printf ("Based on the WFA implementation https://github.com/smarco/WFA\nOutput is printed to stdout (you should redirect to a file if needed).\n");
     printf ("Since the sequences are assumed to be similar, sequences too short or too big w.r.t. the reference are rejected.\n\n");
     printf ("The reference sequence and the unaligned fasta files can be compressed with gz, xz, bz2. The alignment output will be compressed with xz, ");
-    printf ("unless you miss the library or the software was compiled without support. In this case the next available compression is tried.\n\n");
+    printf ("unless you miss the library or the software was compiled without support. In this case the next available compression is tried (then the file extension might not correspond to it).\n\n");
+    printf ("The command `pool` is the number of unaligned sequences read into memory at once (the higher the better, given your memory constraints).\n");
   }
 
   del_arg_parameters (params);
@@ -167,6 +168,7 @@ main (int argc, char **argv)
   cq = new_queue (&(rfas->seq), rfas->seqlength, params.pool->ival[0], i);
   rfas->seq = NULL; // pointer copied above, we don't want to free it here
   del_readfasta (rfas); // will recycle rfas variable to read query unaligned sequences
+  fprintf (stderr, "Batches of %d sequences will be read and distributed over %d threads.\n", params.pool->ival[0], i);
   /* 1.2 open output directory with aligned sequences */
   if (!params.screen->count) outstream = biomcmc_open_compress (outfilename, "w"); 
   
@@ -224,7 +226,7 @@ main (int argc, char **argv)
       }
 
       if (params.screen->count) {
-        for (c = 0; c < cq->n_seq; c++) if (cq->seq[c]) printf (">%s\n%s\n", cq->name[c], cq->aln[c]);
+        for (c = 0; c < cq->n_seq; c++) if (cq->seq[c]) { n_output++; printf (">%s\n%s\n", cq->name[c], cq->aln[c]); }
       }
       else {
 #pragma omp single // lzma is multithreaded so we must make sure only one thread here
@@ -247,7 +249,7 @@ main (int argc, char **argv)
 
     } // while not end of file
     del_readfasta (rfas);
-    fprintf (stderr, "Finished reading file %s in %.3lf secs;\n", params.fasta->filename[j], biomcmc_update_elapsed_time (time1));
+    fprintf (stderr, "Finished reading file %s. In total %d sequences have been read.\n", params.fasta->filename[j], count);
     fflush (stderr);
   }  // for fasta file
   
