@@ -151,6 +151,8 @@ install-sh
 Makefile
 src/Makefile
 include/Makefile
+Makefile.in
+*/Makefile.in
 .deps
 ar-lib
 test-driver
