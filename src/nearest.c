@@ -440,7 +440,7 @@ void
 queue_update_min_heaps_acgt (query_t query, int iq, queue_t cq, int ir)
 { // compare query iq with reference ir; result[] will store matches (to reject terrible quality sequences with few mismatches) but quick_pairwise returns mismatches
   q_item this;
-  int result[4];
+  int result[4], cons_matches = cq->res[4*ir + 1] - cq->res[4*ir];
   int current_incompatible = cq->res[4*ir]; // number of mismatches between this reference and query->consensus (acgt result[] needs only two scores) 
   this.name = NULL;
 
@@ -460,7 +460,7 @@ queue_update_min_heaps_acgt (query_t query, int iq, queue_t cq, int ir)
   for (int i = 0; i < 6; i++) this.score[i] = 0; 
   this.score[0] = result[1] + result[3] - result[0] - result[2]; // result[0] and [2] are mismatches, but we need matches to avoid the low quality trap 
   this.score[1] = result[1] + result[3];  // score (ref) = score(ref,consensus) + score(ref, this query)
-  this.score[2] = result[3] - result[2]; // unique matches at this sequence (so refs more distant from consensus query are preferred)
+  this.score[2] = this.score[0] - cons_matches; // unique matches at this sequence (so refs more distant from consensus query are preferred)
   this.score[3] = cq->non_n[ir]; // tie-breaker is the number of valid sites (i.e. excluding indels and Ns) WARNING: can bias towards labs which impute sites
   this.score[4] = result[0]; // min_heap unlikely to come here, but good to print: number of mismatches to consensus 
   this.score[5] = result[2]; // min_heap unlikely to come here, but good to print: number of mismatches to this query sequence
@@ -494,7 +494,7 @@ queue_update_min_heaps_full (query_t query, int iq, queue_t cq, int ir)
 
   /* we accumulate first 4 scores between this query and two sets from consensus (each 4 scores come from biomcmc_pairwise) */
   for (int i = 0; i < 4; i++) this.score[i] = result[i] + result[i+4] + cq->res[4*ir + i]; // score (ref) = score(ref,consensus) + score(ref, this query)
-  this.score[4] = result[0]; // 5th score is unique matches at this sequence (so refs more distant from consensus query are preferred)  
+  this.score[4] = result[0] + result[4]; // 5th score is unique matches at this sequence (so refs more distant from consensus query are preferred)  
   this.score[5] = cq->non_n[ir]; // last (6th) score is the number of valid sites (i.e. excluding indels and Ns) WARNING: can bias towards labs which impute sites
   this.name = cq->name[ir]; // just a pointer (heap_insert copies if necessary)
 
