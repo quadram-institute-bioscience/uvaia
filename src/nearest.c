@@ -232,7 +232,7 @@ main (int argc, char **argv)
   /* 1.3 open outfile, trying in order xz, bz, gz, and raw */
   outstream = biomcmc_open_compress (outfilename, "w"); 
 
-  non_n_ref = (int)(query->aln->nchar * params.ambig_r->dval[0]);
+  non_n_ref = (int)(query->aln->nchar * (1. - params.ambig_r->dval[0]));
 
   /* 2. read alignment files (can be several) and fill pool of cluster queues */
   fprintf (stderr, "\n Notice that the number of sites used in the comparisons (i.e. non-indel and non-N in at least one query) is %d, and the total alignment length is %d",
