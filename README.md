@@ -27,6 +27,7 @@ imagination, its [pronunciation] resembles WFA.
 
 ## Installation
 ### Conda
+<!---
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/platforms.svg)](https://anaconda.org/bioconda/uvaia)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
 
@@ -36,9 +37,15 @@ conda install -c bioconda uvaia
 ```
 
 The conda version may not be up-to-date, currently it works with gzip but not LZMA (`.xz`) files.
+-->
+
+The version available in conda is outdated, please install it from source during the next few days.
+If you really need a conda package, [here you can find](https://github.com/quadram-institute-bioscience/uvaia/issues/1#issuecomment-1092033238) 
+a more recent version, but still outdated. 
+The code is under active development while we prepare a manuscript for it. 
 
 ### Compiling from source
-If you want to install it from source (e.g. to use the `.xz` format), you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
+To install it from source &mdash;e.g. to use the `.xz` format &mdash;, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
 for a **tl;dr**).
 If you forgot to do so, you can update it with
 ```
