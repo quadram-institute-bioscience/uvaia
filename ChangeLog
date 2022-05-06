@@ -1,2 +1,6 @@
+2022.05.05
+	* TODO: replace biomcmc_open_compress() with biomcmc_create_compress() since it can modify the file name (although it
+	just tries one comrpession and then reverts to raw)
+	* TODO: remove sysroot_ from meta.yaml/host since it shold work? 
 2022.01.10
 	* TODO: scan fasta file more than once, first to find polymorphic sites  

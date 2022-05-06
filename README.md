@@ -91,10 +91,13 @@ The two main programs are:
 
 * *uvaialign*, to align your query sequences against a reference genome. Output goes to `stdout` (your screen).
 * *uvaia*, to search for _aligned_ queries against an _aligned_ database. Both query and database fasta files 
-can be aligned to same reference sequence with `mafft`, `viralMSA`, or `uvaialign`. Output is a table of reference
-sequences which are closest neighbours to each query. It can also generate a fasta file with these reference sequences. 
+can be aligned to same reference sequence with `mafft`, `viralMSA`, or `uvaialign`. 
+Outputs a file with a table of reference sequences which are closest neighbours to each query. 
+It also generates a fasta file which includes these closest reference sequences (and also other, similar sequences).
 
-There is also an experimental program *uvaiaclust* which tries to remove redundant sequences from an alignment. 
+There are also two experimental programs *uvaiaclust* and *uvaiaball*, which are still under development. 
+And we also include the original `uvaia` program, called *uvaia_legacy* and used before 2022, which however cannot cope
+with the huge file sizes we have currently.
 
 ### uvaialign
 ```
@@ -114,31 +117,35 @@ gzip or uncompressed format (xz format not yet available).
 
 ### uvaia
 
+The main program, for searching for closest neighbours. Help page (called with `uvaia --help`):
+
 ```
-Search query sequences against reference ones to describe closest ones
-This program relies on aligned sequences (queries and references must have same size)
+For every query sequence, finds closest neighbours in reference alignment.
+Notice that this software is multithreaded (and its performance depends on it)
+
 The complete syntax is:
 
- uvaia  [-h|--help] [-v|--version] [-n|--nbest=<int>] [-m|--nmax=<int>] [--trim=<int>] [-A|--ref_ambiguity=<double>] [-a|--query_ambiguity=<double>] -r|--reference=[ref.fa(.gz)] [-o|--output=[chosen_refs.fa.xz]] [-t|--nthreads=<int>] [query.fa(.gz,.xz)]
+ uvaia  [-h|--help] [-v|--version] [--acgt] [-k|--keep_resolved] [-x|--exclude_self] [-n|--nbest=<int>] [-t|--trim=<int>] [-A|--ref_ambiguity=<double>] [-a|--query_ambiguity=<double>] [-p|--pool=<int>] -r|--reference=<ref.fa(.gz,.xz)> [-r|--reference=<ref.fa(.gz,.xz)>]... <seqs.fa(.gz,.xz)> [-t|--nthreads=<int>] [-o|--output=<without suffix>]
 
   -h, --help                       print a longer help and exit
   -v, --version                    print version and exit
-  -n, --nbest=<int>                number of best reference sequences per query to show (default=8)
-  -m, --nmax=<int>                 max number of best reference sequences when several optimal (default=2 x nbest)
-  --trim=<int>                     number of sites to trim from both ends (default=0, suggested for sarscov2=230)
+  --acgt                           considers only ACGT sites (i.e. unambiguous SNP differences) in query sequences (mismatch-based)
+  -k, --keep_resolved              keep more resolved and exclude redundant query seqs (default is to keep all)
+  -x, --exclude_self               Exclude reference sequences with same name as a query sequence
+  -n, --nbest=<int>                number of best reference sequences per query to store (default=100)
+  -t, --trim=<int>                 number of sites to trim from both ends (default=0, suggested for sarscov2=230)
   -A, --ref_ambiguity=<double>     maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)
   -a, --query_ambiguity=<double>   maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)
-  -r, --reference=[ref.fa(.xz,.gz,.bz)]    *aligned* reference sequences
-  -o, --output=[chosen_refs.fa.xz] XZIPPED (LZMA) output reference sequences (default is to not save sequences)
+  -p, --pool=<int>                 Pool size, i.e. how many reference seqs are queued to be processed in parallel (larger than number of threads, defaults to 64 per thread)
+  -r, --reference=<ref.fa(.gz,.xz)> aligned reference sequences (can be several files)
+  <seqs.fa(.gz,.xz)>               aligned query sequences
   -t, --nthreads=<int>             suggested number of threads (default is to let system decide; I may not honour your suggestion btw)
-  [query.fa(.gz,.xz)]              *aligned* sequences to search for neighbour references
+  -o, --output=<without suffix>    prefix of xzipped output alignment and table with nearest neighbour sequences
 ```
 
-Both the database of aligned sequences and the set of aligned query sequences can be compressed files (xz, bz, gz). 
-This program uses a lot of memory since it stores the whole (uncompressed) database in memory.
-
-### uvaiann
-This is still experimental, but will likely replace `uvaia` (as soon as I finish benchmarking). It uses priority queues
+This is a rewrite of the old uvaia (currently available as `uvaia_legacy`) which works with very big reference
+alignments (which cannot fit in memory at once).
+It uses priority queues
 (called `min_heap` internally) to store, for each query sequence, only the best scoring references. It assumes that the
 database of reference sequences is too large to fit into memory, and thus we read the (possibly compressed) reference
 alignment in batches, keeping only their names in memory and dumping all sequences that _at some point_ belonged to the
@@ -213,20 +220,17 @@ describing the distance (mismatches) from the reference to the consensus columns
 the "unique" (polymorphic) columns. If you are confused, don't worry and just use their sum as the "SNP distance". 
 Or the difference between the number of valid comparisons and the number of matches, as usual.
 
-### uvaiaclust (experimental)
-Removal of redundant sequences based on a single-distance canopy clustering: each new sequence will be merged into the
-first cluster s.t. its distance is smaller than the threshold. Each cluster is represented by its most resolved sequence
-(fewer Ns). An aligment with the final medoids is returned, with a list of sequence names belonging to each cluster. 
+By default it will generate a csv table named `nn_uvaia.csv.xz`, and if you want to extract the reference
+sequences which would compose the set of closest neighbours, you'll need to do something like:
+```
+xzcat nn_uvaia.csv.xz | cut -d "," -f 2 | sort | uniq > closest_names.txt
+seqkit grep -f names.txt nn_uvaia.aln.xz > closest_names.aln
+```
+If you are using a recent version of `seqkit` (https://github.com/shenwei356/seqkit) which can handle XZ files. 
 
-It is not a proper clustering since identical sequences may belong to distinct medoids. 
-Furthermore the pairwise distances within the cluster may exceed the threshold (since medoids are updated as new
-elements are added). 
-
-If a reference sequence is provided, it is used when updating the medoids, which should be the most resolved and
-furthest from the reference. 
-This is to penalise assemblies where a low resolution is masqueraded by imputing the reference base.
-
-Currently this program is a bit slow (10k sequences in one hour?).
+### Other programs
+Some description about the extra software included are provided in the [README_extra.md](README_extra.md) file, but I do
+not advise you to use them.
 
 ## License 
 SPDX-License-Identifier: GPL-3.0-or-later

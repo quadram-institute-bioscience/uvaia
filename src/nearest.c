@@ -123,7 +123,7 @@ print_usage (arg_parameters params, char *progname)
 
   printf ("%s \n", PACKAGE_STRING);
   printf ("For every query sequence, finds closest neighbours in reference alignment. \n");
-  printf ("Notice that this software is multithreaded (and currently there is no control over number of threads)\n\n"); 
+  printf ("Notice that this software is multithreaded (and its performance depends on it)\n\n"); 
   printf ("The complete syntax is:\n\n %s ", basename(progname));
   arg_print_syntaxv (stdout, params.argtable, "\n\n");
   arg_print_glossary(stdout, params.argtable,"  %-32s %s\n");
