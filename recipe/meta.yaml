@@ -1,5 +1,5 @@
-{% set version="2.0.0" %}
-{% set revision="79049c7f9dbea281eb87eed50f387f17ee2ccfbb" %}
+{% set version="2.0.1" %}
+{% set revision="9986e234c3f7f0fee526bfd3993e2d9ecd388124" %}
 
 package:
   name: uvaia 

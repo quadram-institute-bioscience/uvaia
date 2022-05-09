@@ -329,17 +329,18 @@ main (int argc, char **argv)
 
     del_readfasta (rfas);
     fprintf (stderr, "Finished reading file %s in %.3lf secs;\n", params.ref->filename[j], biomcmc_update_elapsed_time (time0));
-    fprintf (stderr, "Total of %d sequences read; %d saved sequences include closest neighbours and intermediate, %d too ambiguous (excluded)\n", count, n_output, n_invalid); 
+    fprintf (stderr, "Total of %d sequences read; %d saved sequences include closest neighbours and intermediate, %d too ambiguous (excluded). %.3lf secs elapsed. \n",
+             count, n_output, n_invalid, biomcmc_update_elapsed_time (time1)); // time1 since it may be its first time (not called within loop)
     if (params.xclude->count) fprintf (stderr, " %d reference sequences already present in query alignment (based on name only).\n", same_name);
     fflush (stderr);
   }  // for fasta file
   
-  fprintf (stderr, "Saved %d sequences to file %s\n", n_output, outstream->filename); 
   biomcmc_close_compress (outstream);
+  fprintf (stderr, "Saved %d sequences to file %s , %.3lf secs elapsed.\n", n_output, outfilename, biomcmc_update_elapsed_time (time0));
 
   strcpy (outfilename + outlength, ".csv.xz");
   save_distance_table (cq, query, outfilename);
-  fprintf (stderr, "Saved distance table to file %s\n", outfilename); 
+  fprintf (stderr, "Saved distance table to file %s , %.3lf secs elapsed.\n", outfilename, biomcmc_update_elapsed_time (time0));
 
   /* everybody is free to feel good */
   del_query_structure (query);
