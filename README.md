@@ -27,22 +27,22 @@ imagination, its [pronunciation] resembles WFA.
 
 ## Installation
 ### Conda
-<!---
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/platforms.svg)](https://anaconda.org/bioconda/uvaia)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/version)](https://anaconda.org/bioconda/uvaia)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/downloads)](https://anaconda.org/bioconda/uvaia)
 
 After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply run
 ```[bash]
 conda install -c bioconda uvaia
 ```
-
-The conda version may not be up-to-date, currently it works with gzip but not LZMA (`.xz`) files.
--->
-
+<!---
 The version available in conda is outdated, please install it from source during the next few days.
 If you really need a conda package, [here you can find](https://github.com/quadram-institute-bioscience/uvaia/issues/1#issuecomment-1092033238) 
 a more recent version, but still outdated. 
-The code is under active development while we prepare a manuscript for it. 
+-->
+
+The conda version may not be up-to-date. The code is under active development while we prepare a manuscript for it. 
 
 ### Compiling from source
 To install it from source &mdash;e.g. to use the `.xz` format &mdash;, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
@@ -77,12 +77,23 @@ check the directory [recipe](recipe/) for having a better idea of how conda/dock
 
 If the compilation is unsuccessful, you can check if all libraries and packages below are installed:
 ```[bash]
-## packages necessary for autotools (o.w. it will complain when you run "autogen.sh" : 
+## packages necessary for autotools, o.w. it will complain when you run "autogen.sh": 
 /home/simpson/$ apt-get install pkg-config autotools-dev autoconf automake libtool
-/home/simpson/$ (cd tatajuba && autoreconf)  ## the parentheses avoid entering the directory afterwards
+/home/simpson/$ (cd tatajuba && ./autogen.sh)  ## the parentheses avoid entering the directory afterwards
+
 ## C libraries needed or suggested by uvaia : 
 /home/simpson/$ apt-get install zlib1g-dev libomp-dev libbz2-dev check liblzma-dev
 /home/simpson/$ (cd build && ../configure)  ## etc.  
+```
+
+The libraries rely on `pkg-config` to find their location, otherwise you'll see a cryptic error message about `possibly
+undefined macro`. 
+If you can only install `pkg-config` through conda then you may need to install the C libraries via conda as well.
+Or checking and updating your [`$PKG_CONFIG_PATH` environment variable](https://people.freedesktop.org/~dbn/pkg-config-guide.html).
+Thus to install all dependent packages through conda (or mamba, which is faster :wink:):
+
+```
+mamba install automake libtool pkg-config make libgcc-ng check zlib xz bzip2 libgomp
 ```
 
 ## Running
