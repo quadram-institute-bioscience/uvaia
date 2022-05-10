@@ -44,7 +44,7 @@ a more recent version, but still outdated.
 The conda version may not be up-to-date. The code is under active development while we prepare a manuscript for it. 
 
 ### Compiling from source
-To install it from source &mdash;e.g. to use the `.xz` format &mdash;, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
+To install it from source, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
 for a **tl;dr**).
 If you forgot to do so, you can update it with
 ```
