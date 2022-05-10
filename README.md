@@ -75,7 +75,7 @@ from github will complain about uncommited changes. You can run `git stash` (or 
 check the directory [recipe](recipe/) for having a better idea of how conda/docker install it. 
 
 If the compilation is unsuccessful, you can check if all libraries and packages below are installed:
-```[bash]
+```bash
 ## packages necessary for autotools, o.w. it will complain when you run "autogen.sh": 
 /home/simpson/$ apt-get install pkg-config autotools-dev autoconf automake libtool
 /home/simpson/$ (cd tatajuba && ./autogen.sh)  ## the parentheses avoid entering the directory afterwards
