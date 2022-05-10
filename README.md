@@ -27,10 +27,9 @@ imagination, its [pronunciation] resembles WFA.
 
 ## Installation
 ### Conda
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/platforms.svg)](https://anaconda.org/bioconda/uvaia)
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/version.svg)](https://anaconda.org/bioconda/uvaia)
-[![Anaconda-Server Badge](https://anaconda.org/bioconda/tatajuba/badges/downloads.svg)](https://anaconda.org/bioconda/uvaia)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/platforms.svg)](https://anaconda.org/bioconda/uvaia)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
+[![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/downloads.svg)](https://anaconda.org/bioconda/uvaia)
 
 After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply run
 ```[bash]
