@@ -62,7 +62,7 @@ environment is `--prefix=${CONDA_PREFIX}`
 
 Here is an example of its installation, please modify accordingly. 
 
-```[bash]
+```bash
 /home/simpson/$ git clone --recursive git@github.com:quadram-institute-bioscience/uvaia.git
 /home/simpson/$ cd uvaia && ./autogen.sh
 /home/simpson/$ mkdir build && cd build
