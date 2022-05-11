@@ -166,23 +166,80 @@ It runs in parallel using all available processors (in the future the user shoul
 on a "compression" of the query sequences into variable sites and common variants. It can also remove redundant
 sequences, i.e. those identical to or equivalent but with fewer unambiguous sites with another.
 
-Unlike other distance calculation software, it actually calculates the number of matches between sequences as well as
-the number of valid pairwise comparisons. The distance is the difference between these two quantities. 
-It sorts neighbours in the same order as the table columns, using the next column to break ties:
+#### output table
 
-1. *ACGT_matches*: considering only ACGT 
-2. *text_matches*:  exact matches, thus M-M is a match but M-A is not
-3. *partial_matches*: M-A is considered a match since the partially ambiguous `M` equals {A,C}. However the fully ambiguous `N` is neglected
-4. *valid_pair_comparisons*: the `effective` sequence length for the comparison, i.e. sum of sites without gaps or N in any of the two sequences
-5. *ACGT_matches_unique*: a 'consensus' between query seqs is created, and this is the number of matches present in the query but not in the consensus 
+By default uvaia will generate an alignment file named `nn_uvaia.aln.xz` and a csv table `nn_uvaia.csv.xz`.
+The csv table will look like
+```
+query,reference,rank,ACGT_matches,text_matches,partial_matches,valid_pair_comparisons,ACGT_matches_unique,valid_ref_sites
+England/NORW-3078E97/2021,England/NORW-3061C36/2021,1,14985,14985,14987,14988,14985,29843
+England/NORW-3078E97/2021,England/NORW-302EA07/2021,2,14984,14984,14986,14988,14984,29875
+England/NORW-3078E97/2021,England/NORW-3034A7D/2021,3,14984,14984,14986,14988,14984,29869
+England/NORW-3078E97/2021,England/NORW-3034B26/2021,4,14984,14984,14986,14988,14984,29851
+England/NORW-3078E97/2021,England/NORW-306AB26/2021,5,14983,14983,14985,14988,14983,29813
+England/NORW-3078E97/2021,England/NORW-31425AC/2022,6,14982,14982,14985,14988,14982,29169
+```
+
+Where the first three columns are the query sequence name, the reference sequence name, and the rank of the reference
+with regard to the query &mdash; i.e. how close they are, such that rank=1 means that the reference is the closest to the
+query, rank=2 means that it is the second closest to the query etc. The other columns are similarity (match) measures
+and other numbers used in ranking them.
+The output is ordered by rank, for each query. 
+
+Unlike other distance calculation software, it actually calculates the number of matches between sequences as well as
+the number of valid pairwise comparisons.
+A distance can be created from the difference between `valid_pair_comparisons` (or genome length) and one of the number
+of matches. 
+As mentioned above, the rank (of how close the reference is to the query sequence) is given by a set of measures, in
+order given in the table below. 
+
+column | column name | description
+-----  | ----------- | -----------
+4| *ACGT_matches*        | considering only ACGT 
+5| *text_matches*        |  exact matches, thus M-M is a match but M-A is not
+6| *partial_matches*     | M-A is considered a match since the partially ambiguous `M` equals {A,C}. However the fully ambiguous `N` is neglected
+7| *valid_pair_comparisons* | the `effective` sequence length for the comparison, i.e. sum of sites without gaps or N in any of the two sequences
+8| *ACGT_matches_unique* | a 'consensus' between query seqs is created, and this is the number of matches present in the query but not in the consensus 
 (in short, it prefers neighbours farther from the common ancestor of the queries, in case of ties)
-6. *valid_ref_sites*: if everything else is the same, then sequences with less gaps and Ns are preferred (caveat is that some sequencing labs 
+9| *valid_ref_sites*     | if everything else is the same, then sequences with less gaps and Ns are preferred (caveat is that some sequencing labs 
 artificially impute states, in practice removing all gaps and Ns)
  
-The columns 1, 3, and 4 above are the most useful for the final user.
+The 4th, 5th, and 7th columns above are the most useful for the final user. But you can simply look at their rank, as
+described below.  
+
+#### output alignment
+
+The alignment file will include all reference sequences temporarily assigned as closest to the queries. Thus it may have
+many more sequences than the strict set of K nearest neighbours. 
+If you want to extract the reference sequences which would compose the set of closest neighbours, you'll need to do something like:
+
+```
+xzcat nn_uvaia.csv.xz | cut -d "," -f 2 | sort | uniq > closest_names.txt
+seqkit grep -f names.txt nn_uvaia.aln.xz > closest_names.aln
+```
+
+If you are using a recent version of `seqkit` (https://github.com/shenwei356/seqkit) which can handle XZ files.
+By using the rank column from hte csv file, you can chose a subset of "best" sequences to add. For instance, to get only
+the closest neighbours to each query sequence, the first command above could be replaced by
+
+```
+# reference sequence with rank = 1 (i.e. closest)
+xzcat nn_uvaia.csv.xz | grep -e ",1," | cut -d "," -f 2 | sort | uniq > closest_names.txt
+
+# all reference sequences with rank below 21 (i.e. the 20 closest references) 
+xzcat nn_uvaia.csv.xz | gawk -F "," '$3 < 21 {print $2}' | sort | uniq > closest_names.txt
+```
+
+(Notice that the old version of uvaia, now called `uvaia_legacy`, created the final alignment with only the closest
+references; this is not possible anymore in one pass due to very large sequence files). 
+
+#### uvaia reports matches, not distances
 
 The reported number of matches may differ between programs or runs due to how the query sequences are compressed and indexed, 
-however the distances (mismatches) are preserved.
+however their relative ranks should be preserved. 
+Uvaia reports the total number of matches, which is a measure of similarity. 
+Other programs report distances, which is a measure of dissimilarity. 
+
 For instance `valid_pair_comparison` - `partial_matches` generates similar distances as [snp-dists](https://github.com/tseemann/snp-dists).
 This is because [snp-dists](https://github.com/tseemann/snp-dists) excludes every non-ACGT, even partially informative sites, and counts only ACGT.
 Here, sites with a gap or `N` in one of the sequences are ignored, while partially informative sites (e.g. `M` or `R`)
@@ -213,6 +270,8 @@ is usually close to the number of ACGT mismatches (the default distances produce
 They do disagree if for instance *seq3* were instead `KNC GTT KC-`, since the snp-dists distance would be zero (`K`
 is neglected, as is `M`), but uvaia knows that `K={G,T}` which is incompatible (and thus a mismatch) with `A` or `M={A,C}`.
 
+#### matches are better for phylogenetic analysis
+
 Usually uvaia should be used to find neighbouring sequences which will be used in downstream phylogenetic analysis.
 Thus it keeps track of these several measures of similarity: in the limit, two very poor sequences with many gaps
 and very few columns in common (e.g. `------AAA` and `CCC------`) have no mismatches!
@@ -229,14 +288,7 @@ sites (e.g. `M` or `K`) together with gaps and `N`s. The output table will be a 
 describing the distance (mismatches) from the reference to the consensus columns of the query, and the distance using
 the "unique" (polymorphic) columns. If you are confused, don't worry and just use their sum as the "SNP distance". 
 Or the difference between the number of valid comparisons and the number of matches, as usual.
-
-By default it will generate a csv table named `nn_uvaia.csv.xz`, and if you want to extract the reference
-sequences which would compose the set of closest neighbours, you'll need to do something like:
-```
-xzcat nn_uvaia.csv.xz | cut -d "," -f 2 | sort | uniq > closest_names.txt
-seqkit grep -f names.txt nn_uvaia.aln.xz > closest_names.aln
-```
-If you are using a recent version of `seqkit` (https://github.com/shenwei356/seqkit) which can handle XZ files. 
+If you use the option `--acgt`, then the generate files will be `nn_uvaia_acgt.aln.xz` and `nn_uvaia_acgt.csv.xz`.
 
 ### Other programs
 Some description about the extra software included are provided in the [README_extra.md](README_extra.md) file, but I do
