@@ -43,6 +43,15 @@ a more recent version, but still outdated.
 
 The conda version may not be up-to-date. The code is under active development while we prepare a manuscript for it. 
 
+Conda offers a [biocontainer (https://quay.io/repository/biocontainers/uvaia?tab=tags)](https://quay.io/repository/biocontainers/uvaia?tab=tags) 
+such that you can install uvaia through docker.
+For instance, you can try (check link above for most recent tag):
+```bash
+docker pull quay.io/biocontainers/uvaia:2.0.1--hc308579_0
+# run the command "tatajuba -h" using the current directory
+docker run -v `pwd`:`pwd` -w `pwd` quay.io/biocontainers/uvaia:2.0.1--hc308579_0 uvaia --help
+```
+
 ### Compiling from source
 To install it from source, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
 for a **tl;dr**).
