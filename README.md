@@ -190,11 +190,14 @@ Unlike other distance calculation software, it actually calculates the number of
 the number of valid pairwise comparisons.
 A distance can be created from the difference between `valid_pair_comparisons` (or genome length) and one of the number
 of matches. 
-As mentioned above, the rank (of how close the reference is to the query sequence) is given by a set of measures, in
-order given in the table below. 
+As mentioned above, the rank (of how close the reference is to the query sequence) is given by the number of matches
+etc, in the order given in the table below from the 4th to the 9th column.
 
 column | column name | description
 -----  | ----------- | -----------
+1| *query*     | query sequence name
+2| *reference* | reference sequence name (close to query sequence from column 1)
+3| *rank* | order of closeness between reference and query, as given by columns 4-9
 4| *ACGT_matches*        | considering only ACGT 
 5| *text_matches*        |  exact matches, thus M-M is a match but M-A is not
 6| *partial_matches*     | M-A is considered a match since the partially ambiguous `M` equals {A,C}. However the fully ambiguous `N` is neglected
@@ -202,6 +205,8 @@ column | column name | description
 8| *ACGT_matches_unique* | <nobr> a 'consensus' between query seqs is created, and this is the number of matches present in the query but not in the consensus (in short, it prefers neighbours farther from the common ancestor of the queries, in case of ties)  </nobr>
 9| *valid_ref_sites*     | <nobr> if everything else is the same, then sequences with less gaps and Ns are preferred (caveat is that some sequencing labs artificially impute states, in practice removing all gaps and Ns) </nobr>
  
+In other words, the rank is given by the number of `ACGT_matches`, and ties are broken by the number of `text_matches`,
+and so forth.
 The 4th, 5th, and 7th columns above are the most useful for the final user. But you can simply look at their rank, as
 described below.  
 
