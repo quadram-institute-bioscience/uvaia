@@ -216,7 +216,7 @@ The alignment file will include all reference sequences temporarily assigned as 
 many more sequences than the strict set of K nearest neighbours. 
 If you want to extract the reference sequences which would compose the set of closest neighbours, you'll need to do something like:
 
-```
+```bash
 xzcat nn_uvaia.csv.xz | cut -d "," -f 2 | sort | uniq > closest_names.txt
 seqkit grep -f names.txt nn_uvaia.aln.xz > closest_names.aln
 ```
@@ -225,7 +225,7 @@ If you are using a recent version of `seqkit` (https://github.com/shenwei356/seq
 By using the rank column from hte csv file, you can chose a subset of "best" sequences to add. For instance, to get only
 the closest neighbours to each query sequence, the first command above could be replaced by
 
-```
+```bash
 # reference sequence with rank = 1 (i.e. closest)
 xzcat nn_uvaia.csv.xz | grep -e ",1," | cut -d "," -f 2 | sort | uniq > closest_names.txt
 
