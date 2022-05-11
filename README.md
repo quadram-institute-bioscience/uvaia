@@ -199,9 +199,9 @@ column | column name | description
 5| *text_matches*        |  exact matches, thus M-M is a match but M-A is not
 6| *partial_matches*     | M-A is considered a match since the partially ambiguous `M` equals {A,C}. However the fully ambiguous `N` is neglected
 7| *valid_pair_comparisons* | the `effective` sequence length for the comparison, i.e. sum of sites without gaps or N in any of the two sequences
-8| *ACGT_matches_unique* | <nobr> a 'consensus' between query seqs is created, and this is the number of matches present in the query but not in 
+8| *ACGT_matches_unique* | <nobr> a 'consensus' between query seqs is created, and this is the number of matches present in the query but not in\
 the consensus (in short, it prefers neighbours farther from the common ancestor of the queries, in case of ties)  </nobr>
-9| *valid_ref_sites*     | <nobr> if everything else is the same, then sequences with less gaps and Ns are preferred 
+9| *valid_ref_sites*     | <nobr> if everything else is the same, then sequences with less gaps and Ns are preferred\
 (caveat is that some sequencing labs artificially impute states, in practice removing all gaps and Ns) </nobr>
  
 The 4th, 5th, and 7th columns above are the most useful for the final user. But you can simply look at their rank, as
