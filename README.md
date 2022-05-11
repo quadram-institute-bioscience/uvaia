@@ -166,7 +166,7 @@ It runs in parallel using all available processors (in the future the user shoul
 on a "compression" of the query sequences into variable sites and common variants. It can also remove redundant
 sequences, i.e. those identical to or equivalent but with fewer unambiguous sites with another.
 
-#### output table
+#### output table `nn_uvaia.csv.xz` or `nn_uvaia_acgt.csv.xz`
 
 By default uvaia will generate an alignment file named `nn_uvaia.aln.xz` and a csv table `nn_uvaia.csv.xz`.
 The csv table will look like
@@ -207,10 +207,10 @@ column | column name | description
  
 In other words, the rank is given by the number of `ACGT_matches`, and ties are broken by the number of `text_matches`,
 and so forth.
-The 4th, 5th, and 7th columns above are the most useful for the final user. But you can simply look at their rank, as
+The 4th, 6th, and 7th columns above are the most useful for the final user. But you can simply look at their rank, as
 described below.  
 
-#### output alignment
+#### output alignment file `nn_uvaia.aln.xz` or `nn_uvaia_acgt.aln.xz`
 
 The alignment file will include all reference sequences temporarily assigned as closest to the queries. Thus it may have
 many more sequences than the strict set of K nearest neighbours. 
