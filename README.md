@@ -26,14 +26,17 @@ is a fruit tree typical of Brazil. Its name comes from the tupi *iwa'ya*, which 
 imagination, its [pronunciation] resembles WFA.
 
 ## Installation
-### Conda
+### Conda and Docker
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/platforms.svg)](https://anaconda.org/bioconda/uvaia)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/downloads.svg)](https://anaconda.org/bioconda/uvaia)
 
 After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply run
 ```[bash]
+# _not_ recommended: installs uvaia on current environment
 conda install -c bioconda uvaia
+# recommended: creates a new environment and installs uvaia there
+conda create -n uvaia_env uvaia
 ```
 <!---
 The version available in conda is outdated, please install it from source during the next few days.
@@ -42,6 +45,13 @@ a more recent version, but still outdated.
 -->
 
 The conda version may not be up-to-date. The code is under active development while we prepare a manuscript for it. 
+Notice that the conda version depends on `sysroot_linux-64`, which may interfere with your global C environment. Thus it
+is recommended to install uvaia on a separate environment. Thus you need to activate this environment before running
+uvaia:
+```
+conda activate uvaia_env
+```
+
 
 Conda offers a [biocontainer (https://quay.io/repository/biocontainers/uvaia?tab=tags)](https://quay.io/repository/biocontainers/uvaia?tab=tags) 
 such that you can install uvaia through docker.
