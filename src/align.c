@@ -130,6 +130,8 @@ main (int argc, char **argv)
 
   if (params.ambig->dval[0] < 0.001) params.ambig->dval[0] = 0.001;
   if (params.ambig->dval[0] > 1.)    params.ambig->dval[0] = 1.;
+  
+  fprintf (stderr, "program: %s package: %s\n", basename(argv[0]), PACKAGE_STRING);
 
 #ifdef _OPENMP
   if (params.threads->count) {

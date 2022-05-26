@@ -131,6 +131,8 @@ main (int argc, char **argv)
   if (params.dist->ival[0] < 0) params.dist->ival[0] = 0; 
   if (params.snps->ival[0] < 0) params.snps->ival[0] = 0;
 
+  fprintf (stderr, "Experimental program: %s package: %s\n", basename(argv[0]), PACKAGE_STRING);
+  
 #ifdef _OPENMP
   n_clust = omp_get_max_threads (); // upper bound may be distinct to whatever number user has chosen
 #else

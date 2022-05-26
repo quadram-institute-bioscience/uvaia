@@ -122,6 +122,8 @@ main (int argc, char **argv)
   if (params.ambig_r->dval[0] > 1.)    params.ambig_r->dval[0] = 1.;
   if (params.ambig_q->dval[0] < 0.001) params.ambig_q->dval[0] = 0.001;
   if (params.ambig_q->dval[0] > 1.)    params.ambig_q->dval[0] = 1.;
+  
+  fprintf (stderr, "Legacy program: %s (historical value only); package: %s\n", basename(argv[0]), PACKAGE_STRING);
 
 #ifdef _OPENMP
   if (params.threads->count) {
