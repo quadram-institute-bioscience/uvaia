@@ -31,6 +31,7 @@ imagination, its [pronunciation] resembles WFA.
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/downloads.svg)](https://anaconda.org/bioconda/uvaia)
 
+This is the suggested installation route.
 After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply run
 ```[bash]
 # _not_ recommended: installs uvaia on current environment
@@ -63,6 +64,7 @@ docker run -v `pwd`:`pwd` -w `pwd` quay.io/biocontainers/uvaia:2.0.1--hc308579_0
 ```
 
 ### Compiling from source
+Use this option only if you know what you're doing, and if you need the bleeding-edge version.  
 To install it from source, you should download this repository with `git clone --recursive` to ensure it also downloads its submodules (see below
 for a **tl;dr**).
 If you forgot to do so, you can update it with
@@ -99,8 +101,8 @@ If the compilation is unsuccessful, you can check if all libraries and packages 
 /home/simpson/$ apt-get install pkg-config autotools-dev autoconf automake libtool
 /home/simpson/$ (cd tatajuba && ./autogen.sh)  ## the parentheses avoid entering the directory afterwards
 
-## C libraries needed or suggested by uvaia : 
-/home/simpson/$ apt-get install zlib1g-dev libomp-dev libbz2-dev check liblzma-dev
+## C libraries needed or suggested by uvaia (if you do not have root access see conda/mamba below):
+/home/simpson/$ sudo apt-get install zlib1g-dev libomp-dev libbz2-dev check liblzma-dev
 /home/simpson/$ (cd build && ../configure)  ## etc.  
 ```
 
