@@ -130,6 +130,10 @@ There are also two experimental programs *uvaiaclust* and *uvaiaball*, which are
 And we also include the original `uvaia` program, called *uvaia_legacy* and used before 2022, which however cannot cope
 with the huge file sizes we have currently.
 
+
+We also offer a small reference alignment and other test files in directory [data/](data/).
+
+
 ### uvaialign
 ```
 Align query sequences against a reference
