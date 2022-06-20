@@ -1,8 +1,11 @@
 <img src="recipe/uvaia-text.png" height="100" alt="Uvaia">
 
 __Leonardo de Oliveira Martins<sup>1</sup>__
+__Alison E Mather<sup>1,2</sup>__
+__Andrew J Page<sup>1</sup>__
 <br>
 <sub>1. Quadram Institute Bioscience, Norwich Research Park, NR4 7UQ, UK</sub>
+<sub>2. University of East Anglia, Norfolk, UK</sub>
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-brightgreen.svg)](https://github.com/quadram-institute-bioscience/tatajuba/blob/master/LICENSE)
 
