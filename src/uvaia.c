@@ -2,6 +2,8 @@
  * Copyright (C) 2019-today  Leonardo de Oliveira Martins [ leomrtns at gmail.com;  http://www.leomartins.org ]
  */
 
+
+// This is the LEGACY version of uvaia (i.e. used in first publications)
 #include "utils.h" 
 
 typedef struct

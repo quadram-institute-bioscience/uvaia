@@ -9,6 +9,9 @@ __Andrew J Page<sup>1</sup>__
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-brightgreen.svg)](https://github.com/quadram-institute-bioscience/tatajuba/blob/master/LICENSE)
 
+Latest stable version (conda etc.): v2.0.1
+Current version (source code only): v2.0.2
+
 ## Introduction
 
 Uvaia is a program for pairwise reference-based alignment, and subsequent search against an aligned database. 
@@ -172,7 +175,7 @@ The complete syntax is:
   -k, --keep_resolved              keep more resolved and exclude redundant query seqs (default is to keep all)
   -x, --exclude_self               Exclude reference sequences with same name as a query sequence
   -n, --nbest=<int>                number of best reference sequences per query to store (default=100)
-  -t, --trim=<int>                 number of sites to trim from both ends (default=0, suggested for sarscov2=230)
+  --trim=<int>                     number of sites to trim from both ends (default=0, suggested for sarscov2=230)
   -A, --ref_ambiguity=<double>     maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)
   -a, --query_ambiguity=<double>   maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)
   -p, --pool=<int>                 Pool size, i.e. how many reference seqs are queued to be processed in parallel (larger than number of threads, defaults to 64 per thread)
@@ -181,6 +184,9 @@ The complete syntax is:
   -t, --nthreads=<int>             suggested number of threads (default is to let system decide; I may not honour your suggestion btw)
   -o, --output=<without suffix>    prefix of xzipped output alignment and table with nearest neighbour sequences
 ```
+
+Notice that versions before v2.0.2 had both long options `--trim` and `--nthreads` mapped to short option `-t` (in which case
+please use the long option).
 
 This is a rewrite of the old uvaia (currently available as `uvaia_legacy`) which works with very big reference
 alignments (which cannot fit in memory at once).
@@ -247,11 +253,14 @@ If you want to extract the reference sequences which would compose the set of cl
 
 ```bash
 xzcat nn_uvaia.csv.xz | cut -d "," -f 2 | sort | uniq > closest_names.txt
-seqkit grep -f names.txt nn_uvaia.aln.xz > closest_names.aln
+seqkit grep -f closest_names.txt nn_uvaia.aln.xz > closest_names.aln
 ```
 
 If you are using a recent version of `seqkit` (https://github.com/shenwei356/seqkit) which can handle XZ files.
-By using the rank column from hte csv file, you can chose a subset of "best" sequences to add. For instance, to get only
+You can also use `goalign subset` (https://github.com/evolbioinfo/goalign) instead of `seqkit` to extract some
+sequences.
+
+By using the rank column from the csv file, you can chose a subset of "best" sequences to add. For instance, to get only
 the closest neighbours to each query sequence, the first command above could be replaced by
 
 ```bash

@@ -60,7 +60,7 @@ get_parameters_from_argv (int argc, char **argv)
     .hires   = arg_litn("k","keep_resolved",0, 1, "keep more resolved and exclude redundant query seqs (default is to keep all)"),
     .xclude  = arg_litn("x","exclude_self",0, 1, "Exclude reference sequences with same name as a query sequence"),
     .nbest   = arg_int0("n","nbest", NULL, "number of best reference sequences per query to store (default=100)"),
-    .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
+    .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .ambig_q = arg_dbl0("a","query_ambiguity", NULL, "maximum allowed ambiguity for QUERY sequence to be excluded (default=0.5)"),
     .ambig_r = arg_dbl0("A","ref_ambiguity", NULL, "maximum allowed ambiguity for REFERENCE sequence to be excluded (default=0.5)"),
     .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. how many reference seqs are queued to be processed in parallel (larger than number of threads, defaults to 64 per thread)"),

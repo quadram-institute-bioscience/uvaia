@@ -44,7 +44,7 @@ get_parameters_from_argv (int argc, char **argv)
     .help    = arg_litn("h","help",0, 1, "print a longer help and exit"),
     .version = arg_litn("v","version",0, 1, "print version and exit"),
     .dist    = arg_intn("d","distance", NULL, 0, 1, "seqs with this SNP differences or less will be merged (default=1)"),
-    .trim    = arg_int0("t","trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
+    .trim    = arg_int0(NULL,"trim", NULL, "number of sites to trim from both ends (default=0, suggested for sarscov2=230)"),
     .pool    = arg_int0("p","pool", NULL, "Pool size, i.e. number of clustering queues (should be larger than avail threads)"),
     .snps    = arg_int0("s","snps", NULL, "how many SNPs w.r.t. reference it keeps track (default=1, should be small number)"),
     .ref     = arg_filen("r","reference", "<ref.fa(.gz,.xz)>", 0, 1, "reference sequence (medoids are furthest from it)"),
