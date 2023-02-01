@@ -49,4 +49,4 @@ here.
 
 ### uvaiaball (experimental)
 
-This is a ball radius-based neighbour search, but doesn't have the improvements added to `uvaia`.
+This is a ball radius-based neighbour search, but doesn't have some improvements added to `uvaia`

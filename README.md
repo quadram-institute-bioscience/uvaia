@@ -9,8 +9,11 @@ __Andrew J Page<sup>1</sup>__
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-brightgreen.svg)](https://github.com/quadram-institute-bioscience/tatajuba/blob/master/LICENSE)
 
-Latest stable version (conda etc.): v2.0.1
+Latest stable version (conda etc.): v2.0.1 (use long options `--trim` and `--nthreads` if needed, instead of short option `-t`)
+
 Current version (source code only): v2.0.2
+
+Preprint: https://www.biorxiv.org/content/10.1101/2023.01.31.526458v1
 
 ## Introduction
 
@@ -19,12 +22,12 @@ The alignment uses the promising [WFA library](https://github.com/smarco/WFA) im
 the database search is based on score distances from my 
 [biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib) library.
 The first versions used the [kseq.h](https://github.com/lh3/seqtk) library, by Heng Li, for reading fasta files, but
-currently it relies on general compression libraries available on 
+it currently relies on general compression libraries available on 
 [biomcmc-lib](https://github.com/quadram-institute-bioscience/biomcmc-lib).
 In particular all functions should work with XZ compressed files for optimal compression. 
 
-Uvaia has been developed to help with SARS-CoV-2 analysis, being used as a quick replacement for [civet](https://github.com/COG-UK/civet).
-Nowadays it can handle data sets too big for most equivalent software. 
+Uvaia has been developed to help with SARS-CoV-2 analysis, being used as a quick replacement for [civet](https://github.com/COG-UK/civet) in 2020/2021.
+Nowadays it can handle data sets too big for most equivalent software.
 
 
 #### Etymology
@@ -41,10 +44,14 @@ imagination, its [pronunciation] resembles WFA.
 This is the suggested installation route.
 After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply run
 ```[bash]
-# _not_ recommended: installs uvaia on current environment
-conda install -c bioconda uvaia
 # recommended: creates a new environment and installs uvaia there
 conda create -n uvaia_env uvaia
+```
+Feel free to change the new environment name from `uvaia_env` to something sensible. Alternatively you can install uvaia
+in your current environment:
+```[bash]
+# not recommended, since it installs uvaia on current environment
+conda install -c bioconda uvaia
 ```
 <!---
 The version available in conda is outdated, please install it from source during the next few days.
@@ -52,10 +59,10 @@ If you really need a conda package, [here you can find](https://github.com/quadr
 a more recent version, but still outdated. 
 -->
 
-The conda version may not be up-to-date. The code is under active development while we prepare a manuscript for it. 
-Notice that the conda version depends on `sysroot_linux-64`, which may interfere with your global C environment. Thus it
-is recommended to install uvaia on a separate environment. Thus you need to activate this environment before running
-uvaia:
+The conda version may not be up-to-date. 
+Notice that the conda version depends on `sysroot_linux-64`, which may interfere with your global C environment. 
+Thus we recommend it above to install uvaia on a separate environment. 
+You then need to activate this environment before running uvaia (assuming the above environment name `uvaia_env`):
 ```
 conda activate uvaia_env
 ```
@@ -197,9 +204,14 @@ alignment in batches, keeping only their names in memory and dumping all sequenc
 set. Thus in the beginning the software saves a lot of reference sequences which may not be very close to the query
 sequences, and later it updates the output alignment less often, with closer sequences only. 
 
-It runs in parallel using all available processors (in the future the user should be able to modify it), and it relies
+It runs in parallel using the requested number of threads (default is to use all available processors), and it relies
 on a "compression" of the query sequences into variable sites and common variants. It can also remove redundant
 sequences, i.e. those identical to or equivalent but with fewer unambiguous sites with another.
+
+The pool size is how many reference genomes are stored in memory at once, and should usually be a multiple of the number
+of threads (i.e. a large number, between 10 and 1000 times the number of threads let's say).
+The query alignment file should not be huge, since all query sequences **are** stored in memory (except for a few
+optimisations). 
 
 #### output table `nn_uvaia.csv.xz` or `nn_uvaia_acgt.csv.xz`
 
@@ -240,7 +252,7 @@ column | column name | description
 8| *ACGT_matches_unique* | <nobr> a 'consensus' between query seqs is created, and this is the number of matches present in the query but not in the consensus (in short, it prefers neighbours farther from the common ancestor of the queries, in case of ties)  </nobr>
 9| *valid_ref_sites*     | <nobr> if everything else is the same, then sequences with less gaps and Ns are preferred (caveat is that some sequencing labs artificially impute states, in practice removing all gaps and Ns) </nobr>
  
-In other words, the rank is given by the number of `ACGT_matches`, and ties are broken by the number of `text_matches`,
+In other words, the rank is given by the number of `ACGT_matches`, where ties are broken by the number of `text_matches`,
 and so forth.
 The 4th, 6th, and 7th columns above are the most useful for the final user. But you can simply look at their rank, as
 described below.  
@@ -272,14 +284,14 @@ xzcat nn_uvaia.csv.xz | gawk -F "," '$3 < 21 {print $2}' | sort | uniq > closest
 ```
 
 (Notice that the old version of uvaia, now called `uvaia_legacy`, created the final alignment with only the closest
-references; this is not possible anymore in one pass due to very large sequence files). 
+references; this is not possible anymore in one pass due to the very large sequence files). 
 
 #### uvaia reports matches, not distances
 
 The reported number of matches may differ between programs or runs due to how the query sequences are compressed and indexed, 
 however their relative ranks should be preserved. 
-Uvaia reports the total number of matches, which is a measure of similarity. 
-Other programs report distances, which is a measure of dissimilarity. 
+Uvaia reports total numbers of matches, which are measures of similarity. 
+Other programs report distances, which are a measure of dissimilarity. 
 
 For instance `valid_pair_comparison` - `partial_matches` generates similar distances as [snp-dists](https://github.com/tseemann/snp-dists).
 This is because [snp-dists](https://github.com/tseemann/snp-dists) excludes every non-ACGT, even partially informative sites, and counts only ACGT.
