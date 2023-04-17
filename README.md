@@ -14,6 +14,7 @@ Latest stable version (conda etc.): v2.0.1 (use long options `--trim` and `--nth
 Current version (source code only): v2.0.2
 
 Preprint: https://www.biorxiv.org/content/10.1101/2023.01.31.526458v1
+Video tutorials: https://www.youtube.com/playlist?list=PLPZ2aSS2ApqoU6-FCd2H035uJHnLu9fTL
 
 ## Introduction
 
