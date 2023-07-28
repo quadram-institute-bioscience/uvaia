@@ -37,12 +37,13 @@ is a fruit tree typical of Brazil. Its name comes from the tupi *iwa'ya*, which 
 imagination, its [pronunciation] resembles WFA.
 
 ## Installation
-### Conda and Docker
+### Conda and Docker/Singularity
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/platforms.svg)](https://anaconda.org/bioconda/uvaia)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/latest_release_date.svg)](https://anaconda.org/bioconda/uvaia)
 [![Anaconda-Server Badge](https://anaconda.org/bioconda/uvaia/badges/downloads.svg)](https://anaconda.org/bioconda/uvaia)
 
-This is the suggested installation route.
+This is the suggested installation route if you have access to a GNU/Linux machine. Otherwise please see the
+docker/singularity option, or how to compile it from source. 
 After you install [miniconda](https://conda.io/en/latest/miniconda.html), simply run
 ```[bash]
 # recommended: creates a new environment and installs uvaia there
@@ -68,9 +69,8 @@ You then need to activate this environment before running uvaia (assuming the ab
 conda activate uvaia_env
 ```
 
-
 Conda offers a [biocontainer (https://quay.io/repository/biocontainers/uvaia?tab=tags)](https://quay.io/repository/biocontainers/uvaia?tab=tags) 
-such that you can install uvaia through docker.
+such that you can run uvaia through docker or [https://docs.sylabs.io/guides/2.6/user-guide/singularity_and_docker.html](singluarity).
 For instance, you can try (check link above for most recent tag):
 ```bash
 docker pull quay.io/biocontainers/uvaia:2.0.1--hc308579_0
