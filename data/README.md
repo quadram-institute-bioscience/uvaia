@@ -18,6 +18,4 @@ you have access, to the unaligned sequences at [GISAID](https://www.gisaid.org/)
 The files [04.sample_1_1k.names](04.sample_1_1k.names) and [04.sample_3_5k.names](04.sample_3_5k.names) contain the
 sequences names of the samples used in the manuscript, and can all be found in the reference alignment above. 
 
-The file [04.samples_1_and_3.gisaid.tsv](04.samples_1_and_3.gisaid.tsv) contains the GISAID ID for the subset of sequences in
-the manuscript which were deposited to GISAID, noticing that in general only those with less than 10% uncertainty were
-uploaded.
+For the timing analyses, we used [the COGUK data set](https://www.cogconsortium.uk/) ("Unmasked alignment" available from [the archived version of 7th May 2023](https://webarchive.nationalarchives.gov.uk/ukgwa/20230507102210/https://www.cogconsortium.uk/priority-areas/data-linkage-analysis/public-data-analysis/))
