@@ -8,6 +8,7 @@ __Andrew J Page<sup>1</sup>__
 <sub>2. University of East Anglia, Norfolk, UK</sub>
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-brightgreen.svg)](https://github.com/quadram-institute-bioscience/tatajuba/blob/master/LICENSE)
+[![DOI](https://zenodo.org/badge/295232711.svg)](https://zenodo.org/doi/10.5281/zenodo.10513430)
 
 Latest stable version (conda etc.): v2.0.1 (use long options `--trim` and `--nthreads` if needed, instead of short option `-t`)
 
